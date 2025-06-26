@@ -24,6 +24,40 @@ import { AuthenticatedRequest } from '../middleware/auth';
  *         breakdown:
  *           type: object
  *           description: Detailed calculation breakdown
+ *     DailySpendingConfig:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: integer
+ *         name:
+ *           type: string
+ *         periodType:
+ *           type: string
+ *           enum: [toSalary, toMonthEnd, customDays, toSpecificDate]
+ *         periodValue:
+ *           type: integer
+ *         includeSalary:
+ *           type: boolean
+ *         includeRecurringIncome:
+ *           type: boolean
+ *         includeRecurringExpenses:
+ *           type: boolean
+ *         selectedGoalIds:
+ *           type: array
+ *           items:
+ *             type: integer
+ *         emergencyBuffer:
+ *           type: number
+ *         isActive:
+ *           type: boolean
+ *         user_id:
+ *           type: integer
+ *         created_at:
+ *           type: string
+ *           format: date-time
+ *         updated_at:
+ *           type: string
+ *           format: date-time
  */
 
 export class DailySpendingController {
@@ -33,6 +67,66 @@ export class DailySpendingController {
     this.dailySpendingService = new DailySpendingService();
   }
 
+  /**
+   * @swagger
+   * /api/daily-spending/configs:
+   *   post:
+   *     summary: Create daily spending configuration
+   *     tags: [Daily Spending]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - name
+   *               - periodType
+   *             properties:
+   *               name:
+   *                 type: string
+   *               periodType:
+   *                 type: string
+   *                 enum: [toSalary, toMonthEnd, customDays, toSpecificDate]
+   *               periodValue:
+   *                 type: integer
+   *               includeSalary:
+   *                 type: boolean
+   *                 default: true
+   *               includeRecurringIncome:
+   *                 type: boolean
+   *                 default: true
+   *               includeRecurringExpenses:
+   *                 type: boolean
+   *                 default: true
+   *               selectedGoalIds:
+   *                 type: array
+   *                 items:
+   *                   type: integer
+   *               emergencyBuffer:
+   *                 type: number
+   *                 default: 0
+   *     responses:
+   *       201:
+   *         description: Configuration created successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *                 data:
+   *                   $ref: '#/components/schemas/DailySpendingConfig'
+   *       400:
+   *         description: Validation error
+   *       401:
+   *         description: Unauthorized
+   */
   createConfig = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       if (!req.user) {
@@ -68,6 +162,31 @@ export class DailySpendingController {
     }
   };
 
+  /**
+   * @swagger
+   * /api/daily-spending/configs:
+   *   get:
+   *     summary: Get user's daily spending configurations
+   *     tags: [Daily Spending]
+   *     security:
+   *       - bearerAuth: []
+   *     responses:
+   *       200:
+   *         description: Configurations retrieved successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 data:
+   *                   type: array
+   *                   items:
+   *                     $ref: '#/components/schemas/DailySpendingConfig'
+   *       401:
+   *         description: Unauthorized
+   */
   getConfigs = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       if (!req.user) {
@@ -92,6 +211,40 @@ export class DailySpendingController {
     }
   };
 
+  /**
+   * @swagger
+   * /api/daily-spending/configs/{id}:
+   *   get:
+   *     summary: Get daily spending configuration by ID
+   *     tags: [Daily Spending]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: integer
+   *         description: Configuration ID
+   *     responses:
+   *       200:
+   *         description: Configuration retrieved successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 data:
+   *                   $ref: '#/components/schemas/DailySpendingConfig'
+   *       400:
+   *         description: Invalid configuration ID
+   *       401:
+   *         description: Unauthorized
+   *       404:
+   *         description: Configuration not found
+   */
   getConfigById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       if (!req.user) {
@@ -134,6 +287,66 @@ export class DailySpendingController {
     }
   };
 
+  /**
+   * @swagger
+   * /api/daily-spending/configs/{id}:
+   *   put:
+   *     summary: Update daily spending configuration
+   *     tags: [Daily Spending]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: integer
+   *         description: Configuration ID
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               name:
+   *                 type: string
+   *               periodType:
+   *                 type: string
+   *                 enum: [toSalary, toMonthEnd, customDays, toSpecificDate]
+   *               periodValue:
+   *                 type: integer
+   *               includeSalary:
+   *                 type: boolean
+   *               includeRecurringIncome:
+   *                 type: boolean
+   *               includeRecurringExpenses:
+   *                 type: boolean
+   *               selectedGoalIds:
+   *                 type: array
+   *                 items:
+   *                   type: integer
+   *               emergencyBuffer:
+   *                 type: number
+   *     responses:
+   *       200:
+   *         description: Configuration updated successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *                 data:
+   *                   $ref: '#/components/schemas/DailySpendingConfig'
+   *       400:
+   *         description: Validation error or invalid configuration ID
+   *       401:
+   *         description: Unauthorized
+   */
   updateConfig = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       if (!req.user) {
@@ -169,6 +382,38 @@ export class DailySpendingController {
     }
   };
 
+  /**
+   * @swagger
+   * /api/daily-spending/configs/{id}:
+   *   delete:
+   *     summary: Delete daily spending configuration
+   *     tags: [Daily Spending]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: integer
+   *         description: Configuration ID
+   *     responses:
+   *       200:
+   *         description: Configuration deleted successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *       400:
+   *         description: Invalid configuration ID or deletion failed
+   *       401:
+   *         description: Unauthorized
+   */
   deleteConfig = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       if (!req.user) {
@@ -203,6 +448,38 @@ export class DailySpendingController {
     }
   };
 
+  /**
+   * @swagger
+   * /api/daily-spending/configs/{id}/activate:
+   *   post:
+   *     summary: Activate daily spending configuration
+   *     tags: [Daily Spending]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: integer
+   *         description: Configuration ID
+   *     responses:
+   *       200:
+   *         description: Configuration activated successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *       400:
+   *         description: Invalid configuration ID or activation failed
+   *       401:
+   *         description: Unauthorized
+   */
   activateConfig = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       if (!req.user) {

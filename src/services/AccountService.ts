@@ -76,10 +76,28 @@ export class AccountService {
     await this.accountRepository.remove(account);
   }
 
-  async updateAccountBalance(accountId: number, amount: number): Promise<void> {
-    await this.accountRepository.update(accountId, {
-      balance: () => `balance + ${amount}`,
-    });
+  async updateAccountBalance(accountId: number, amount: number): Promise<void>;
+  async updateAccountBalance(accountId: number, userId: number, amount: number, type: 'income' | 'expense'): Promise<void>;
+  async updateAccountBalance(accountId: number, userIdOrAmount: number, amount?: number, type?: 'income' | 'expense'): Promise<void> {
+    if (amount === undefined) {
+      // Simple version: updateAccountBalance(accountId, amount)
+      await this.accountRepository.update(accountId, {
+        balance: () => `balance + ${userIdOrAmount}`,
+      });
+    } else {
+      // Full version: updateAccountBalance(accountId, userId, amount, type)
+      const userId = userIdOrAmount;
+      // Verify the account belongs to the user
+      const account = await this.getAccountById(accountId, userId);
+      if (!account) {
+        throw new Error('Account not found or does not belong to user');
+      }
+
+      const adjustedAmount = type === 'expense' ? -amount : amount;
+      await this.accountRepository.update(accountId, {
+        balance: () => `balance + ${adjustedAmount}`,
+      });
+    }
   }
 
   async getAccountBalance(accountId: number, userId: number): Promise<number> {

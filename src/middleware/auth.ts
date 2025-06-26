@@ -66,3 +66,7 @@ export class AuthMiddleware {
     }
   };
 }
+
+// Create and export auth middleware instance
+const authMiddleware = new AuthMiddleware();
+export const auth = authMiddleware.authenticate;

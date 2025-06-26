@@ -12,6 +12,12 @@ import { AppDataSource } from './config/database';
 import authRoutes from './routes/auth';
 import accountRoutes from './routes/accounts';
 import dailySpendingRoutes from './routes/daily-spending';
+import transactionRoutes from './routes/transactions';
+import recurringPaymentRoutes from './routes/recurring-payments';
+import salaryRoutes from './routes/salary';
+import goalRoutes from './routes/goals';
+import snapshotRoutes from './routes/snapshots';
+import analyticsRoutes from './routes/analytics';
 import { errorHandler } from './middleware/errorHandler';
 
 dotenv.config();
@@ -57,12 +63,36 @@ const swaggerOptions = {
         description: 'User authentication endpoints',
       },
       {
+        name: 'Accounts',
+        description: 'Account management endpoints',
+      },
+      {
         name: 'Daily Spending',
         description: 'Daily spending calculation and configuration endpoints',
       },
       {
-        name: 'Accounts',
-        description: 'Account management endpoints',
+        name: 'Transactions',
+        description: 'Transaction management endpoints',
+      },
+      {
+        name: 'Recurring Payments',
+        description: 'Recurring payment management endpoints',
+      },
+      {
+        name: 'Salary',
+        description: 'Salary management endpoints',
+      },
+      {
+        name: 'Goals',
+        description: 'Goal management endpoints',
+      },
+      {
+        name: 'Snapshots',
+        description: 'Snapshot management endpoints',
+      },
+      {
+        name: 'Analytics',
+        description: 'Analytics and reporting endpoints',
       },
     ],
   },
@@ -95,6 +125,12 @@ app.get('/health', (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/accounts', accountRoutes);
 app.use('/api/daily-spending', dailySpendingRoutes);
+app.use('/api/transactions', transactionRoutes);
+app.use('/api/recurring-payments', recurringPaymentRoutes);
+app.use('/api/salary', salaryRoutes);
+app.use('/api/goals', goalRoutes);
+app.use('/api/snapshots', snapshotRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 app.use('*', (_req, res) => {
   res.status(404).json({

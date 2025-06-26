@@ -163,6 +163,33 @@ export class AuthController {
     }
   };
 
+  /**
+   * @swagger
+   * /api/auth/refresh-token:
+   *   post:
+   *     summary: Refresh access token
+   *     tags: [Authentication]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - refreshToken
+   *             properties:
+   *               refreshToken:
+   *                 type: string
+   *     responses:
+   *       200:
+   *         description: Token refreshed successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/AuthResponse'
+   *       401:
+   *         description: Invalid or expired refresh token
+   */
   refreshToken = async (req: Request, res: Response): Promise<void> => {
     try {
       const { refreshToken } = req.body;
@@ -190,6 +217,31 @@ export class AuthController {
     }
   };
 
+  /**
+   * @swagger
+   * /api/auth/profile:
+   *   get:
+   *     summary: Get user profile
+   *     tags: [Authentication]
+   *     security:
+   *       - bearerAuth: []
+   *     responses:
+   *       200:
+   *         description: User profile retrieved successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 data:
+   *                   $ref: '#/components/schemas/User'
+   *       401:
+   *         description: Unauthorized
+   *       404:
+   *         description: User not found
+   */
   getProfile = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       if (!req.user) {
@@ -228,6 +280,45 @@ export class AuthController {
     }
   };
 
+  /**
+   * @swagger
+   * /api/auth/profile:
+   *   put:
+   *     summary: Update user profile
+   *     tags: [Authentication]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               name:
+   *                 type: string
+   *               email:
+   *                 type: string
+   *                 format: email
+   *     responses:
+   *       200:
+   *         description: Profile updated successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *                 data:
+   *                   $ref: '#/components/schemas/User'
+   *       400:
+   *         description: Validation error
+   *       401:
+   *         description: Unauthorized
+   */
   updateProfile = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       if (!req.user) {
@@ -272,6 +363,46 @@ export class AuthController {
     }
   };
 
+  /**
+   * @swagger
+   * /api/auth/change-password:
+   *   post:
+   *     summary: Change user password
+   *     tags: [Authentication]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - currentPassword
+   *               - newPassword
+   *             properties:
+   *               currentPassword:
+   *                 type: string
+   *               newPassword:
+   *                 type: string
+   *                 minLength: 8
+   *     responses:
+   *       200:
+   *         description: Password changed successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *       400:
+   *         description: Validation error or incorrect current password
+   *       401:
+   *         description: Unauthorized
+   */
   changePassword = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       if (!req.user) {

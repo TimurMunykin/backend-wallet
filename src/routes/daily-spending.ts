@@ -1,12 +1,11 @@
 import { Router } from 'express';
 import { DailySpendingController } from '../controllers/DailySpendingController';
-import { AuthMiddleware } from '../middleware/auth';
+import { auth } from '../middleware/auth';
 
 const router = Router();
 const dailySpendingController = new DailySpendingController();
-const authMiddleware = new AuthMiddleware();
 
-router.use(authMiddleware.authenticate);
+router.use(auth);
 
 router.get('/calculate', dailySpendingController.calculateDailySpending);
 router.post('/configs', dailySpendingController.createConfig);
