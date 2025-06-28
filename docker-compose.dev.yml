@@ -1,6 +1,19 @@
 version: '3.8'
 
 services:
+  frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - app
+    restart: unless-stopped
+
   app:
     build: 
       context: .
@@ -14,6 +27,7 @@ services:
       - JWT_SECRET=dev-secret-key-change-in-production
       - JWT_ACCESS_EXPIRY=1h
       - JWT_REFRESH_EXPIRY=7d
+      - FRONTEND_URL=http://localhost:3001
     volumes:
       - .:/app
       - /app/node_modules

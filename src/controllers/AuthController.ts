@@ -90,6 +90,8 @@ export class AuthController {
         return;
       }
 
+      console.log('Registration attempt:', { email, name, passwordLength: password?.length });
+
       const result = await this.authService.register({ email, password, name });
 
       res.status(201).json({
@@ -98,9 +100,31 @@ export class AuthController {
         data: result,
       });
     } catch (error) {
-      res.status(400).json({
+      console.error('Registration error:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        email: req.body.email,
+        name: req.body.name,
+      });
+
+      // Check if this is a business logic error (user already exists, password validation)
+      // vs a system error (database connection, etc.)
+      const isBusinessLogicError = error instanceof Error && (
+        error.message.includes('already exists') ||
+        error.message.includes('Password validation failed') ||
+        error.message.includes('validation failed')
+      );
+
+      const statusCode = isBusinessLogicError ? 400 : 500;
+      const message = error instanceof Error ? error.message : 'Registration failed';
+
+      res.status(statusCode).json({
         success: false,
-        message: error instanceof Error ? error.message : 'Registration failed',
+        message,
+        ...(process.env.NODE_ENV === 'development' && { 
+          stack: error instanceof Error ? error.stack : undefined,
+          error: error instanceof Error ? error.toString() : 'Unknown error'
+        }),
       });
     }
   };
@@ -148,6 +172,8 @@ export class AuthController {
         return;
       }
 
+      console.log('Login attempt:', { email });
+
       const result = await this.authService.login({ email, password });
 
       res.status(200).json({
@@ -156,9 +182,28 @@ export class AuthController {
         data: result,
       });
     } catch (error) {
-      res.status(401).json({
+      console.error('Login error:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        email: req.body.email,
+      });
+
+      // Check if this is an authentication error vs system error
+      const isAuthError = error instanceof Error && (
+        error.message.includes('Invalid email or password') ||
+        error.message.includes('User not found')
+      );
+
+      const statusCode = isAuthError ? 401 : 500;
+      const message = error instanceof Error ? error.message : 'Login failed';
+
+      res.status(statusCode).json({
         success: false,
-        message: error instanceof Error ? error.message : 'Login failed',
+        message,
+        ...(process.env.NODE_ENV === 'development' && { 
+          stack: error instanceof Error ? error.stack : undefined,
+          error: error instanceof Error ? error.toString() : 'Unknown error'
+        }),
       });
     }
   };

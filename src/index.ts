@@ -27,7 +27,7 @@ const PORT = process.env.PORT || 3000;
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 100000,
   message: {
     success: false,
     message: 'Too many requests from this IP, please try again later.',
@@ -102,9 +102,32 @@ const swaggerOptions = {
 const specs = swaggerJsdoc(swaggerOptions);
 
 app.use(helmet());
+
+// CORS configuration for different environments
+const corsOrigins = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return [
+      'http://localhost',      // Production frontend
+      'http://localhost:80',   // Production frontend with port
+      process.env.FRONTEND_URL || 'http://localhost'
+    ];
+  } else {
+    // Development environment
+    return [
+      'http://localhost:3001', // Frontend development server
+      'http://localhost:3000', // Backend server (for swagger UI)
+      'http://127.0.0.1:3001', // Alternative localhost format
+      'http://127.0.0.1:3000', // Alternative localhost format
+      process.env.FRONTEND_URL || 'http://localhost:3001'
+    ];
+  }
+};
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: corsOrigins(),
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 app.use(morgan('combined'));
 app.use(limiter);

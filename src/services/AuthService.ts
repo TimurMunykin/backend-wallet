@@ -39,42 +39,58 @@ export class AuthService {
   }
 
   async register(userData: RegisterUserDto): Promise<AuthResponse> {
-    const existingUser = await this.userRepository.findOne({
-      where: { email: userData.email },
-    });
+    try {
+      console.log('AuthService: Starting registration for email:', userData.email);
 
-    if (existingUser) {
-      throw new Error('User with this email already exists');
-    }
+      const existingUser = await this.userRepository.findOne({
+        where: { email: userData.email },
+      });
 
-    const passwordValidation = this.passwordService.validatePasswordStrength(userData.password);
-    if (!passwordValidation.isValid) {
-      throw new Error(`Password validation failed: ${passwordValidation.errors.join(', ')}`);
-    }
+      if (existingUser) {
+        throw new Error('User with this email already exists');
+      }
 
-    const hashedPassword = await this.passwordService.hashPassword(userData.password);
+      console.log('AuthService: Validating password strength');
+      const passwordValidation = this.passwordService.validatePasswordStrength(userData.password);
+      if (!passwordValidation.isValid) {
+        throw new Error(`Password validation failed: ${passwordValidation.errors.join(', ')}`);
+      }
 
-    const user = this.userRepository.create({
-      email: userData.email,
-      password_hash: hashedPassword,
-      name: userData.name,
-    });
+      console.log('AuthService: Hashing password');
+      const hashedPassword = await this.passwordService.hashPassword(userData.password);
 
-    const savedUser = await this.userRepository.save(user);
+      console.log('AuthService: Creating user entity');
+      const user = this.userRepository.create({
+        email: userData.email,
+        password_hash: hashedPassword,
+        name: userData.name,
+      });
 
-    const tokens = this.jwtService.generateTokens({
-      userId: savedUser.id,
-      email: savedUser.email,
-    });
+      console.log('AuthService: Saving user to database');
+      const savedUser = await this.userRepository.save(user);
 
-    return {
-      user: {
-        id: savedUser.id,
+      console.log('AuthService: Generating tokens for user ID:', savedUser.id);
+      const tokens = this.jwtService.generateTokens({
+        userId: savedUser.id,
         email: savedUser.email,
-        name: savedUser.name,
-      },
-      tokens,
-    };
+      });
+
+      return {
+        user: {
+          id: savedUser.id,
+          email: savedUser.email,
+          name: savedUser.name,
+        },
+        tokens,
+      };
+    } catch (error) {
+      console.error('AuthService: Registration failed:', {
+        email: userData.email,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw error;
+    }
   }
 
   async login(loginData: LoginUserDto): Promise<AuthResponse> {
