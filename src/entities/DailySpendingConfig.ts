@@ -41,6 +41,9 @@ export class DailySpendingConfig {
   @Column({ type: 'date', nullable: true })
   custom_end_date?: Date;
 
+  @Column({ type: 'date', nullable: true })
+  salary_date?: Date;
+
   @Column({ default: true })
   include_pending_salary!: boolean;
 

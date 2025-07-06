@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { AppDataSource } from '../config/database';
 import { DailySpendingConfig } from '../entities/DailySpendingConfig';
 import { DailySpendingCache } from '../entities/DailySpendingCache';
@@ -12,6 +12,7 @@ export interface CreateDailySpendingConfigDto {
   periodType: string;
   customDays?: number;
   customEndDate?: Date;
+  salaryDate?: Date;
   includePendingSalary?: boolean;
   includeRecurringIncome?: boolean;
   includeRecurringExpenses?: boolean;
@@ -63,12 +64,17 @@ export class DailySpendingService {
       throw new Error('Custom end date is required when period type is to_date');
     }
 
+    if (configData.periodType === 'to_salary' && !configData.salaryDate) {
+      throw new Error('Salary date is required when period type is to_salary');
+    }
+
     const config = this.configRepository.create({
       user_id: userId,
       name: configData.name,
       period_type: configData.periodType,
       custom_days: configData.customDays,
       custom_end_date: configData.customEndDate,
+      salary_date: configData.salaryDate,
       include_pending_salary: configData.includePendingSalary ?? true,
       include_recurring_income: configData.includeRecurringIncome ?? true,
       include_recurring_expenses: configData.includeRecurringExpenses ?? true,
@@ -169,7 +175,7 @@ export class DailySpendingService {
   }
 
   private async performCalculation(userId: number, config: DailySpendingConfig): Promise<DailySpendingCalculation> {
-    const currentBalance = await this.accountService.getTotalBalance(userId);
+    const currentBalance = Number(await this.accountService.getTotalBalance(userId)) || 0;
     
     let expectedSalary = 0;
     let expectedRecurringIncome = 0;
@@ -179,27 +185,40 @@ export class DailySpendingService {
     const { endDate, daysRemaining } = this.calculatePeriodEnd(config);
 
     if (config.include_pending_salary) {
-      expectedSalary = await this.calculateExpectedSalary(userId, endDate);
+      expectedSalary = Number(await this.calculateExpectedSalary(userId, endDate)) || 0;
     }
 
     if (config.include_recurring_income) {
-      expectedRecurringIncome = await this.calculateRecurringIncome(userId, endDate);
+      expectedRecurringIncome = Number(await this.calculateRecurringIncome(userId, endDate)) || 0;
     }
 
     if (config.include_recurring_expenses) {
-      expectedRecurringExpenses = await this.calculateRecurringExpenses(userId, endDate);
+      expectedRecurringExpenses = Number(await this.calculateRecurringExpenses(userId, endDate)) || 0;
     }
 
     if (config.active_goals.length > 0) {
-      goalsReserved = await this.calculateGoalsReserved(config.active_goals, daysRemaining);
+      goalsReserved = Number(await this.calculateGoalsReserved(config.active_goals, daysRemaining)) || 0;
     }
+
+    const emergencyBuffer = Number(config.emergency_buffer) || 0;
+
+    // Debug logging
+    console.log('Daily Spending Calculation Debug:', {
+      currentBalance,
+      expectedSalary,
+      expectedRecurringIncome,
+      expectedRecurringExpenses,
+      goalsReserved,
+      emergencyBuffer,
+      daysRemaining
+    });
 
     const availableAmount = currentBalance 
       + expectedSalary 
       + expectedRecurringIncome 
       - expectedRecurringExpenses 
       - goalsReserved 
-      - config.emergency_buffer;
+      - emergencyBuffer;
 
     const dailyLimit = daysRemaining > 0 ? availableAmount / daysRemaining : 0;
 
@@ -214,7 +233,7 @@ export class DailySpendingService {
         expectedRecurringIncome,
         expectedRecurringExpenses,
         goalsReserved,
-        emergencyBuffer: config.emergency_buffer,
+        emergencyBuffer,
         availableAmount,
         periodDays: daysRemaining,
       },
@@ -235,12 +254,21 @@ export class DailySpendingService {
         break;
       
       case 'to_date':
-        endDate = config.custom_end_date!;
+        endDate = new Date(config.custom_end_date!);
         break;
       
       case 'to_salary':
+        if (config.salary_date) {
+          endDate = new Date(config.salary_date);
+        } else {
+          // Fallback to 2 weeks from now if no salary date specified
+          endDate = new Date(now.getTime() + (14 * 24 * 60 * 60 * 1000));
+        }
+        break;
+      
       default:
-        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 15);
+        // Default to 2 weeks from now
+        endDate = new Date(now.getTime() + (14 * 24 * 60 * 60 * 1000));
         break;
     }
 
@@ -256,7 +284,7 @@ export class DailySpendingService {
     if (accountIds.length === 0) return 0;
 
     const salaryPayments = await this.salaryPaymentRepository.find({
-      where: { account_id: accountIds as any },
+      where: { account_id: In(accountIds) },
     });
 
     let totalExpectedSalary = 0;
@@ -266,7 +294,7 @@ export class DailySpendingService {
       const salaryDate = new Date(now.getFullYear(), now.getMonth(), salary.start_day);
       
       if (salaryDate <= endDate && salaryDate >= now) {
-        totalExpectedSalary += salary.expected_amount;
+        totalExpectedSalary += Number(salary.expected_amount) || 0;
       }
     }
 
@@ -289,8 +317,8 @@ export class DailySpendingService {
 
     const recurringPayments = await this.recurringPaymentRepository.find({
       where: { 
-        account_id: accountIds as any,
-        type: type as any,
+        account_id: In(accountIds),
+        type: type,
       },
     });
 
@@ -298,18 +326,21 @@ export class DailySpendingService {
     const now = new Date();
 
     for (const payment of recurringPayments) {
-      if (payment.end_date && payment.end_date < now) continue;
+      if (payment.end_date && new Date(payment.end_date) < now) continue;
 
       const occurrences = this.calculateOccurrences(payment, now, endDate);
-      totalAmount += occurrences * payment.amount;
+      totalAmount += occurrences * (Number(payment.amount) || 0);
     }
 
     return totalAmount;
   }
 
   private calculateOccurrences(payment: RecurringPayment, startDate: Date, endDate: Date): number {
-    const start = new Date(Math.max(startDate.getTime(), payment.start_date.getTime()));
-    const end = payment.end_date ? new Date(Math.min(endDate.getTime(), payment.end_date.getTime())) : endDate;
+    const paymentStartDate = new Date(payment.start_date);
+    const paymentEndDate = payment.end_date ? new Date(payment.end_date) : null;
+    
+    const start = new Date(Math.max(startDate.getTime(), paymentStartDate.getTime()));
+    const end = paymentEndDate ? new Date(Math.min(endDate.getTime(), paymentEndDate.getTime())) : endDate;
 
     if (start >= end) return 0;
 
@@ -335,7 +366,7 @@ export class DailySpendingService {
     if (goalIds.length === 0) return 0;
 
     const goals = await this.goalRepository.find({
-      where: { id: goalIds as any },
+      where: { id: In(goalIds) },
     });
 
     let totalReserved = 0;
@@ -343,10 +374,13 @@ export class DailySpendingService {
     for (const goal of goals) {
       if (goal.achieved) continue;
 
-      const daysToTarget = Math.ceil((goal.target_date.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+      const goalTargetDate = new Date(goal.target_date);
+      const daysToTarget = Math.ceil((goalTargetDate.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
       
       if (daysToTarget > 0) {
-        const dailyGoalAmount = (goal.target_amount + goal.min_balance) / daysToTarget;
+        const targetAmount = Number(goal.target_amount) || 0;
+        const minBalance = Number(goal.min_balance) || 0;
+        const dailyGoalAmount = (targetAmount + minBalance) / daysToTarget;
         totalReserved += dailyGoalAmount * Math.min(daysRemaining, daysToTarget);
       }
     }
