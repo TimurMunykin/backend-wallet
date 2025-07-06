@@ -55,6 +55,9 @@ interface DailySpendingCalculation {
   currentBalance: number
   availableForGoals: number
   daysRemaining: number
+  spentToday: number
+  remainingToday: number
+  upcomingTransactions: number
   breakdown: any
 }
 
@@ -278,6 +281,22 @@ export default function DailySpending() {
                 </Typography>
               </Grid>
               <Grid item xs={12} md={3}>
+                <Typography variant="h5" color="error">
+                  {formatCurrency(Number(calculation.spentToday))}
+                </Typography>
+                <Typography variant="subtitle1" color="textSecondary">
+                  Spent Today
+                </Typography>
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <Typography variant="h5" color="success">
+                  {formatCurrency(Number(calculation.remainingToday))}
+                </Typography>
+                <Typography variant="subtitle1" color="textSecondary">
+                  Remaining Today
+                </Typography>
+              </Grid>
+              <Grid item xs={12} md={3}>
                 <Typography variant="h5">
                   {formatCurrency(Number(calculation.currentBalance))}
                 </Typography>
@@ -299,6 +318,25 @@ export default function DailySpending() {
                 </Typography>
                 <Typography variant="subtitle1" color="textSecondary">
                   Available for Goals
+                </Typography>
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <Typography variant="h5" color="warning">
+                  {formatCurrency(Number(calculation.upcomingTransactions))}
+                </Typography>
+                <Typography variant="subtitle1" color="textSecondary">
+                  Upcoming Expenses
+                </Typography>
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <Typography variant="h5">
+                  {calculation.spentToday > 0 ? 
+                    `${((calculation.spentToday / calculation.dailyLimit) * 100).toFixed(1)}%` : 
+                    '0%'
+                  }
+                </Typography>
+                <Typography variant="subtitle1" color="textSecondary">
+                  Daily Budget Used
                 </Typography>
               </Grid>
             </Grid>

@@ -51,7 +51,10 @@ interface DailySpending {
   dailyLimit: number
   spentToday: number
   remainingToday: number
-  daysUntilSalary: number
+  daysRemaining: number
+  currentBalance: number
+  availableForGoals: number
+  upcomingTransactions: number
 }
 
 export default function Dashboard() {
@@ -195,6 +198,9 @@ export default function Dashboard() {
                       {formatCurrency(dailySpending.dailyLimit)}
                     </Typography>
                     <Typography variant="body2" color="textSecondary">
+                      Spent: {formatCurrency(dailySpending.spentToday)}
+                    </Typography>
+                    <Typography variant="body2" color="success.main">
                       Remaining: {formatCurrency(dailySpending.remainingToday)}
                     </Typography>
                   </Box>

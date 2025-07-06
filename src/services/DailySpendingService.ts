@@ -5,6 +5,7 @@ import { DailySpendingCache } from '../entities/DailySpendingCache';
 import { Goal } from '../entities/Goal';
 import { RecurringPayment } from '../entities/RecurringPayment';
 import { SalaryPayment } from '../entities/SalaryPayment';
+import { Transaction } from '../entities/Transaction';
 import { AccountService } from './AccountService';
 
 export interface CreateDailySpendingConfigDto {
@@ -26,6 +27,9 @@ export interface DailySpendingCalculation {
   currentBalance: number;
   availableForGoals: number;
   daysRemaining: number;
+  spentToday: number;
+  remainingToday: number;
+  upcomingTransactions: number;
   breakdown: {
     startingBalance: number;
     expectedSalary: number;
@@ -44,6 +48,7 @@ export class DailySpendingService {
   private goalRepository: Repository<Goal>;
   private recurringPaymentRepository: Repository<RecurringPayment>;
   private salaryPaymentRepository: Repository<SalaryPayment>;
+  private transactionRepository: Repository<Transaction>;
   private accountService: AccountService;
 
   constructor() {
@@ -52,6 +57,7 @@ export class DailySpendingService {
     this.goalRepository = AppDataSource.getRepository(Goal);
     this.recurringPaymentRepository = AppDataSource.getRepository(RecurringPayment);
     this.salaryPaymentRepository = AppDataSource.getRepository(SalaryPayment);
+    this.transactionRepository = AppDataSource.getRepository(Transaction);
     this.accountService = new AccountService();
   }
 
@@ -164,6 +170,9 @@ export class DailySpendingService {
         currentBalance: cachedResult.current_balance,
         availableForGoals: cachedResult.available_for_goals,
         daysRemaining: cachedResult.days_remaining,
+        spentToday: cachedResult.spent_today,
+        remainingToday: cachedResult.remaining_today,
+        upcomingTransactions: cachedResult.upcoming_transactions,
         breakdown: cachedResult.calculation_breakdown as any,
       };
     }
@@ -202,6 +211,12 @@ export class DailySpendingService {
 
     const emergencyBuffer = Number(config.emergency_buffer) || 0;
 
+    // Calculate actual spending for today
+    const spentToday = Number(await this.calculateSpentToday(userId)) || 0;
+    
+    // Calculate upcoming transactions in the period
+    const upcomingTransactions = Number(await this.calculateUpcomingTransactions(userId, endDate)) || 0;
+
     // Debug logging
     console.log('Daily Spending Calculation Debug:', {
       currentBalance,
@@ -210,7 +225,9 @@ export class DailySpendingService {
       expectedRecurringExpenses,
       goalsReserved,
       emergencyBuffer,
-      daysRemaining
+      daysRemaining,
+      spentToday,
+      upcomingTransactions
     });
 
     const availableAmount = currentBalance 
@@ -218,15 +235,20 @@ export class DailySpendingService {
       + expectedRecurringIncome 
       - expectedRecurringExpenses 
       - goalsReserved 
-      - emergencyBuffer;
+      - emergencyBuffer
+      - upcomingTransactions; // Subtract upcoming transactions
 
     const dailyLimit = daysRemaining > 0 ? availableAmount / daysRemaining : 0;
+    const remainingToday = Math.max(0, dailyLimit - spentToday);
 
     return {
       dailyLimit,
       currentBalance,
       availableForGoals: Math.max(0, availableAmount),
       daysRemaining,
+      spentToday,
+      remainingToday,
+      upcomingTransactions,
       breakdown: {
         startingBalance: currentBalance,
         expectedSalary,
@@ -405,6 +427,9 @@ export class DailySpendingService {
       current_balance: calculation.currentBalance,
       available_for_goals: calculation.availableForGoals,
       days_remaining: calculation.daysRemaining,
+      spent_today: calculation.spentToday,
+      remaining_today: calculation.remainingToday,
+      upcoming_transactions: calculation.upcomingTransactions,
       calculation_breakdown: calculation.breakdown,
       calculated_at: new Date(),
       expires_at: cacheExpiry,
@@ -417,6 +442,10 @@ export class DailySpendingService {
     await this.cacheRepository.delete({ config_id: configId });
   }
 
+  async clearUserCaches(userId: number): Promise<void> {
+    await this.cacheRepository.delete({ user_id: userId });
+  }
+
   async deleteConfig(configId: number, userId: number): Promise<void> {
     const config = await this.getConfigById(configId, userId);
     
@@ -426,5 +455,51 @@ export class DailySpendingService {
 
     await this.clearCache(configId);
     await this.configRepository.remove(config);
+  }
+
+  private async calculateSpentToday(userId: number): Promise<number> {
+    const userAccounts = await this.accountService.getUserAccounts(userId);
+    const accountIds = userAccounts.map(account => account.id);
+
+    if (accountIds.length === 0) return 0;
+
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000 - 1);
+
+    const result = await this.transactionRepository
+      .createQueryBuilder('transaction')
+      .innerJoin('transaction.account', 'account')
+      .select('SUM(transaction.amount)', 'total')
+      .where('account.id IN (:...accountIds)', { accountIds })
+      .andWhere('transaction.type = :type', { type: 'expense' })
+      .andWhere('transaction.transaction_date >= :startOfDay', { startOfDay })
+      .andWhere('transaction.transaction_date <= :endOfDay', { endOfDay })
+      .getRawOne();
+
+    return Number(result?.total) || 0;
+  }
+
+  private async calculateUpcomingTransactions(userId: number, endDate: Date): Promise<number> {
+    const userAccounts = await this.accountService.getUserAccounts(userId);
+    const accountIds = userAccounts.map(account => account.id);
+
+    if (accountIds.length === 0) return 0;
+
+    const now = new Date();
+    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    // Get upcoming expense transactions between tomorrow and end date
+    const result = await this.transactionRepository
+      .createQueryBuilder('transaction')
+      .innerJoin('transaction.account', 'account')
+      .select('SUM(transaction.amount)', 'total')
+      .where('account.id IN (:...accountIds)', { accountIds })
+      .andWhere('transaction.type = :type', { type: 'expense' })
+      .andWhere('transaction.transaction_date >= :tomorrow', { tomorrow })
+      .andWhere('transaction.transaction_date <= :endDate', { endDate })
+      .getRawOne();
+
+    return Number(result?.total) || 0;
   }
 }

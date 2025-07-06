@@ -35,6 +35,15 @@ export class DailySpendingCache {
   @Column('decimal', { precision: 5, scale: 2 })
   days_remaining!: number;
 
+  @Column('decimal', { precision: 12, scale: 2, default: 0 })
+  spent_today!: number;
+
+  @Column('decimal', { precision: 12, scale: 2, default: 0 })
+  remaining_today!: number;
+
+  @Column('decimal', { precision: 12, scale: 2, default: 0 })
+  upcoming_transactions!: number;
+
   @Column('jsonb')
   calculation_breakdown!: object;
 
