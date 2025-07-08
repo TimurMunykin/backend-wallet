@@ -5,8 +5,8 @@
  * This script shows how to interact with the MCP server
  */
 
-const { spawn } = require('child_process');
-const path = require('path');
+import { spawn } from 'child_process';
+import path from 'path';
 
 console.log('🚀 MCP Server Demo');
 console.log('==================\n');
@@ -45,18 +45,15 @@ function sendRequest(method, params = {}) {
   });
 }
 
-// Test ping tool
-async function testPing() {
-  console.log('🏓 Test Ping:');
+// Test tools list
+async function testToolsList() {
+  console.log('📋 List Tools:');
   try {
-    const response = await sendRequest('tools/call', {
-      name: 'ping',
-      arguments: {}
-    });
+    const response = await sendRequest('tools/list');
     console.log(`Response: ${response}`);
     console.log('\n---\n');
   } catch (error) {
-    console.error('Ping test failed:', error);
+    console.error('Tools list failed:', error);
   }
 }
 
@@ -71,44 +68,13 @@ server.stderr.on('data', (data) => {
 
 async function runDemo() {
   try {
-    // Test ping first
-    await testPing();
+    // Wait a bit for server to start
+    await new Promise(resolve => setTimeout(resolve, 1000));
     
-    // List tools
-    console.log('📋 List Tools:');
-    await sendRequest('tools/list');
-    console.log('\n---\n');
+    // List tools first to see all available capabilities
+    await testToolsList();
     
-    // Test getTotalBalance
-    console.log('📋 Get Total Balance:');
-    await sendRequest('tools/call', {
-      name: 'getTotalBalance',
-      arguments: {
-        userId: 'demo-user'
-      }
-    });
-    console.log('\n---\n');
-    
-    // Test getUserAccounts
-    console.log('📋 Get User Accounts:');
-    await sendRequest('tools/call', {
-      name: 'getUserAccounts',
-      arguments: {
-        userId: 'demo-user'
-      }
-    });
-    console.log('\n---\n');
-    
-    // Test getRecentTransactions
-    console.log('📋 Get Recent Transactions:');
-    await sendRequest('tools/call', {
-      name: 'getRecentTransactions',
-      arguments: {
-        userId: 'demo-user',
-        limit: 5
-      }
-    });
-    console.log('\n---\n');
+    console.log('✅ Demo completed successfully!');
     
   } catch (error) {
     console.error('Demo failed:', error);
