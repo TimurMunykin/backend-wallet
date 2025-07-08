@@ -28,9 +28,15 @@ import {
   FormControlLabel,
   Alert,
   CircularProgress,
-  Divider
+  Divider,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  List,
+  ListItem,
+  ListItemText
 } from '@mui/material'
-import { Add, Delete, Settings, Calculate, CheckCircle } from '@mui/icons-material'
+import { Add, Delete, Settings, Calculate, CheckCircle, ExpandMore } from '@mui/icons-material'
 
 interface DailySpendingConfig {
   id: number
@@ -58,7 +64,35 @@ interface DailySpendingCalculation {
   spentToday: number
   remainingToday: number
   upcomingTransactions: number
-  breakdown: any
+  breakdown: {
+    startingBalance: number
+    expectedSalary: number
+    expectedRecurringIncome: number
+    expectedRecurringExpenses: number
+    goalsReserved: number
+    emergencyBuffer: number
+    availableAmount: number
+    periodDays: number
+    salaryDetails: Array<{date: string, amount: number, description: string}>
+    recurringIncomeDetails: Array<{date: string, amount: number, description: string, frequency: string}>
+    recurringExpenseDetails: Array<{date: string, amount: number, description: string, frequency: string}>
+    upcomingTransactionDetails: Array<{date: string, amount: number, description: string, type: string}>
+    calculationSteps: {
+      step1_startingAmount: number
+      step2_afterSalary: number
+      step3_afterRecurringIncome: number
+      step4_afterRecurringExpenses: number
+      step5_afterGoals: number
+      step6_afterEmergencyBuffer: number
+      step7_afterUpcomingTransactions: number
+      finalDailyLimit: number
+      spentToday: number
+      remainingToday: number
+    }
+    calculationFormula: string
+    endDate: string
+    calculationDate: string
+  }
 }
 
 export default function DailySpending() {
@@ -221,6 +255,14 @@ export default function DailySpending() {
       style: 'currency',
       currency: 'USD'
     }).format(amount)
+  }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    })
   }
 
   const getPeriodLabel = (config: DailySpendingConfig) => {
@@ -552,6 +594,286 @@ export default function DailySpending() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Detailed Breakdown Section */}
+      {calculation && (
+        <Box sx={{ mt: 4 }}>
+          <Accordion>
+            <AccordionSummary expandIcon={<ExpandMore />}>
+              <Typography variant="h6">
+                💡 Detailed Calculation Breakdown
+              </Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Grid container spacing={3}>
+                {/* Calculation Formula */}
+                <Grid item xs={12} md={6}>
+                  <Card>
+                    <CardContent>
+                      <Typography variant="h6" gutterBottom>
+                        📊 Calculation Formula
+                      </Typography>
+                      <Box sx={{ fontFamily: 'monospace', fontSize: '0.9rem', whiteSpace: 'pre-line', bgcolor: '#f5f5f5', p: 2, borderRadius: 1 }}>
+                        {calculation.breakdown.calculationFormula}
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Grid>
+
+                {/* Step-by-Step Breakdown */}
+                <Grid item xs={12} md={6}>
+                  <Card>
+                    <CardContent>
+                      <Typography variant="h6" gutterBottom>
+                        🔢 Step-by-Step Calculation
+                      </Typography>
+                      <List dense>
+                        <ListItem>
+                          <ListItemText 
+                            primary="Starting Balance"
+                            secondary={formatCurrency(calculation.breakdown.calculationSteps.step1_startingAmount)}
+                          />
+                        </ListItem>
+                        {calculation.breakdown.expectedSalary > 0 && (
+                          <ListItem>
+                            <ListItemText 
+                              primary="+ Expected Salary"
+                              secondary={formatCurrency(calculation.breakdown.calculationSteps.step2_afterSalary)}
+                            />
+                          </ListItem>
+                        )}
+                        {calculation.breakdown.expectedRecurringIncome > 0 && (
+                          <ListItem>
+                            <ListItemText 
+                              primary="+ Recurring Income"
+                              secondary={formatCurrency(calculation.breakdown.calculationSteps.step3_afterRecurringIncome)}
+                            />
+                          </ListItem>
+                        )}
+                        {calculation.breakdown.expectedRecurringExpenses > 0 && (
+                          <ListItem>
+                            <ListItemText 
+                              primary="- Recurring Expenses"
+                              secondary={formatCurrency(calculation.breakdown.calculationSteps.step4_afterRecurringExpenses)}
+                            />
+                          </ListItem>
+                        )}
+                        {calculation.breakdown.goalsReserved > 0 && (
+                          <ListItem>
+                            <ListItemText 
+                              primary="- Goals Reserved"
+                              secondary={formatCurrency(calculation.breakdown.calculationSteps.step5_afterGoals)}
+                            />
+                          </ListItem>
+                        )}
+                        {calculation.breakdown.emergencyBuffer > 0 && (
+                          <ListItem>
+                            <ListItemText 
+                              primary="- Emergency Buffer"
+                              secondary={formatCurrency(calculation.breakdown.calculationSteps.step6_afterEmergencyBuffer)}
+                            />
+                          </ListItem>
+                        )}
+                        {calculation.upcomingTransactions > 0 && (
+                          <ListItem>
+                            <ListItemText 
+                              primary="- Upcoming Transactions"
+                              secondary={formatCurrency(calculation.upcomingTransactions)}
+                            />
+                          </ListItem>
+                        )}
+                        <Divider sx={{ my: 1 }} />
+                        <ListItem>
+                          <ListItemText 
+                            primary="= Available Amount"
+                            secondary={formatCurrency(calculation.breakdown.availableAmount)}
+                          />
+                        </ListItem>
+                        <ListItem>
+                          <ListItemText 
+                            primary={`÷ Days Remaining (${calculation.daysRemaining})`}
+                            secondary={formatCurrency(calculation.breakdown.calculationSteps.finalDailyLimit)}
+                          />
+                        </ListItem>
+                        <ListItem>
+                          <ListItemText 
+                            primary="- Spent Today"
+                            secondary={formatCurrency(calculation.spentToday)}
+                          />
+                        </ListItem>
+                      </List>
+                    </CardContent>
+                  </Card>
+                </Grid>
+
+                {/* Detailed Transaction Lists */}
+                {calculation.breakdown.salaryDetails.length > 0 && (
+                  <Grid item xs={12} md={6}>
+                    <Card>
+                      <CardContent>
+                        <Typography variant="h6" gutterBottom>
+                          💰 Expected Salary Payments
+                        </Typography>
+                        <TableContainer>
+                          <Table size="small">
+                            <TableHead>
+                              <TableRow>
+                                <TableCell>Date</TableCell>
+                                <TableCell>Amount</TableCell>
+                                <TableCell>Description</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {calculation.breakdown.salaryDetails.map((item, index) => (
+                                <TableRow key={index}>
+                                  <TableCell>{formatDate(item.date)}</TableCell>
+                                  <TableCell>{formatCurrency(item.amount)}</TableCell>
+                                  <TableCell>{item.description}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                )}
+
+                {calculation.breakdown.recurringIncomeDetails.length > 0 && (
+                  <Grid item xs={12} md={6}>
+                    <Card>
+                      <CardContent>
+                        <Typography variant="h6" gutterBottom>
+                          📈 Recurring Income
+                        </Typography>
+                        <TableContainer>
+                          <Table size="small">
+                            <TableHead>
+                              <TableRow>
+                                <TableCell>Date</TableCell>
+                                <TableCell>Amount</TableCell>
+                                <TableCell>Description</TableCell>
+                                <TableCell>Frequency</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {calculation.breakdown.recurringIncomeDetails.map((item, index) => (
+                                <TableRow key={index}>
+                                  <TableCell>{formatDate(item.date)}</TableCell>
+                                  <TableCell>{formatCurrency(item.amount)}</TableCell>
+                                  <TableCell>{item.description}</TableCell>
+                                  <TableCell>
+                                    <Chip label={item.frequency} size="small" color="success" />
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                )}
+
+                {calculation.breakdown.recurringExpenseDetails.length > 0 && (
+                  <Grid item xs={12} md={6}>
+                    <Card>
+                      <CardContent>
+                        <Typography variant="h6" gutterBottom>
+                          📉 Recurring Expenses
+                        </Typography>
+                        <TableContainer>
+                          <Table size="small">
+                            <TableHead>
+                              <TableRow>
+                                <TableCell>Date</TableCell>
+                                <TableCell>Amount</TableCell>
+                                <TableCell>Description</TableCell>
+                                <TableCell>Frequency</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {calculation.breakdown.recurringExpenseDetails.map((item, index) => (
+                                <TableRow key={index}>
+                                  <TableCell>{formatDate(item.date)}</TableCell>
+                                  <TableCell>{formatCurrency(item.amount)}</TableCell>
+                                  <TableCell>{item.description}</TableCell>
+                                  <TableCell>
+                                    <Chip label={item.frequency} size="small" color="error" />
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                )}
+
+                {calculation.breakdown.upcomingTransactionDetails.length > 0 && (
+                  <Grid item xs={12} md={6}>
+                    <Card>
+                      <CardContent>
+                        <Typography variant="h6" gutterBottom>
+                          🕐 Upcoming Transactions
+                        </Typography>
+                        <TableContainer>
+                          <Table size="small">
+                            <TableHead>
+                              <TableRow>
+                                <TableCell>Date</TableCell>
+                                <TableCell>Amount</TableCell>
+                                <TableCell>Description</TableCell>
+                                <TableCell>Type</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {calculation.breakdown.upcomingTransactionDetails.map((item, index) => (
+                                <TableRow key={index}>
+                                  <TableCell>{formatDate(item.date)}</TableCell>
+                                  <TableCell>{formatCurrency(item.amount)}</TableCell>
+                                  <TableCell>{item.description}</TableCell>
+                                  <TableCell>
+                                    <Chip label={item.type} size="small" color="warning" />
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                )}
+
+                {/* Calculation Metadata */}
+                <Grid item xs={12}>
+                  <Card>
+                    <CardContent>
+                      <Typography variant="h6" gutterBottom>
+                        📝 Calculation Info
+                      </Typography>
+                      <Grid container spacing={2}>
+                        <Grid item xs={12} sm={6}>
+                          <Typography variant="body2" color="textSecondary">
+                            Calculation Date: {formatDate(calculation.breakdown.calculationDate)}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                          <Typography variant="body2" color="textSecondary">
+                            Target End Date: {formatDate(calculation.breakdown.endDate)}
+                          </Typography>
+                        </Grid>
+                      </Grid>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              </Grid>
+            </AccordionDetails>
+          </Accordion>
+        </Box>
+      )}
     </Box>
   )
 }

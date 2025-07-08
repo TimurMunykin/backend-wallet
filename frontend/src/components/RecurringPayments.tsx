@@ -25,6 +25,13 @@ import {
 } from '@mui/material'
 import { Add, Delete } from '@mui/icons-material'
 
+interface Account {
+  id: number
+  name: string
+  balance: number
+  currency: string
+}
+
 interface RecurringPayment {
   id: number
   amount: number
@@ -42,6 +49,7 @@ interface RecurringPayment {
 
 export default function RecurringPayments() {
   const [recurringPayments, setRecurringPayments] = useState<RecurringPayment[]>([])
+  const [accounts, setAccounts] = useState<Account[]>([])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [formData, setFormData] = useState({
@@ -50,12 +58,35 @@ export default function RecurringPayments() {
     description: '',
     frequency: 'monthly' as 'daily' | 'weekly' | 'monthly',
     startDate: '',
-    accountId: 1
+    accountId: ''
   })
 
   useEffect(() => {
     fetchRecurringPayments()
+    loadAccounts()
   }, [])
+
+  const loadAccounts = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch('/api/accounts', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      if (response.ok) {
+        const result = await response.json()
+        const data = result.success ? result.data : []
+        setAccounts(Array.isArray(data) ? data : [])
+        // Set default account if available
+        if (data.length > 0 && !formData.accountId) {
+          setFormData(prev => ({ ...prev, accountId: data[0].id.toString() }))
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load accounts:', error)
+    }
+  }
 
   const fetchRecurringPayments = async () => {
     try {
@@ -91,26 +122,34 @@ export default function RecurringPayments() {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          ...formData,
-          amount: parseFloat(formData.amount)
+          accountId: parseInt(formData.accountId),
+          amount: parseFloat(formData.amount),
+          type: formData.type,
+          description: formData.description,
+          frequency: formData.frequency,
+          startDate: formData.startDate
         })
       })
       
       if (response.ok) {
         setOpen(false)
-        setFormData({
-          amount: '',
-          type: 'expense',
-          description: '',
-          frequency: 'monthly',
-          startDate: '',
-          accountId: 1
-        })
+        resetForm()
         fetchRecurringPayments()
       }
     } catch (error) {
       console.error('Error creating recurring payment:', error)
     }
+  }
+
+  const resetForm = () => {
+    setFormData({
+      amount: '',
+      type: 'expense',
+      description: '',
+      frequency: 'monthly',
+      startDate: '',
+      accountId: accounts.length > 0 ? accounts[0].id.toString() : ''
+    })
   }
 
   const handleDelete = async (id: number) => {
@@ -173,6 +212,7 @@ export default function RecurringPayments() {
           <TableHead>
             <TableRow>
               <TableCell>Description</TableCell>
+              <TableCell>Account</TableCell>
               <TableCell>Amount</TableCell>
               <TableCell>Type</TableCell>
               <TableCell>Frequency</TableCell>
@@ -185,6 +225,7 @@ export default function RecurringPayments() {
               recurringPayments.map((payment) => (
                 <TableRow key={payment.id}>
                   <TableCell>{payment.description}</TableCell>
+                  <TableCell>{payment.account?.name || `Account ${payment.account_id}`}</TableCell>
                   <TableCell>{formatCurrency(payment.amount)}</TableCell>
                   <TableCell>
                     <Chip 
@@ -208,7 +249,7 @@ export default function RecurringPayments() {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={6} align="center">
+                <TableCell colSpan={7} align="center">
                   <Typography variant="body2" color="textSecondary">
                     No recurring payments found
                   </Typography>
@@ -230,6 +271,22 @@ export default function RecurringPayments() {
                 value={formData.description}
                 onChange={(e) => setFormData({...formData, description: e.target.value})}
               />
+            </Grid>
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel>Account *</InputLabel>
+                <Select
+                  value={formData.accountId}
+                  label="Account *"
+                  onChange={(e) => setFormData({...formData, accountId: e.target.value})}
+                >
+                  {accounts.map((account) => (
+                    <MenuItem key={account.id} value={account.id.toString()}>
+                      {account.name} ({formatCurrency(account.balance)})
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </Grid>
             <Grid item xs={6}>
               <TextField

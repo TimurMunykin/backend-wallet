@@ -39,6 +39,25 @@ export interface DailySpendingCalculation {
     emergencyBuffer: number;
     availableAmount: number;
     periodDays: number;
+    salaryDetails: Array<{date: string, amount: number, description: string}>;
+    recurringIncomeDetails: Array<{date: string, amount: number, description: string, frequency: string}>;
+    recurringExpenseDetails: Array<{date: string, amount: number, description: string, frequency: string}>;
+    upcomingTransactionDetails: Array<{date: string, amount: number, description: string, type: string}>;
+    calculationSteps: {
+      step1_startingAmount: number;
+      step2_afterSalary: number;
+      step3_afterRecurringIncome: number;
+      step4_afterRecurringExpenses: number;
+      step5_afterGoals: number;
+      step6_afterEmergencyBuffer: number;
+      step7_afterUpcomingTransactions: number;
+      finalDailyLimit: number;
+      spentToday: number;
+      remainingToday: number;
+    };
+    calculationFormula: string;
+    endDate: string;
+    calculationDate: string;
   };
 }
 
@@ -163,20 +182,7 @@ export class DailySpendingService {
       throw new Error('No configuration found');
     }
 
-    const cachedResult = await this.getCachedCalculation(config.id);
-    if (cachedResult && cachedResult.expires_at > new Date()) {
-      return {
-        dailyLimit: cachedResult.daily_limit,
-        currentBalance: cachedResult.current_balance,
-        availableForGoals: cachedResult.available_for_goals,
-        daysRemaining: cachedResult.days_remaining,
-        spentToday: cachedResult.spent_today,
-        remainingToday: cachedResult.remaining_today,
-        upcomingTransactions: cachedResult.upcoming_transactions,
-        breakdown: cachedResult.calculation_breakdown as any,
-      };
-    }
-
+    // Skip cache for debugging
     const calculation = await this.performCalculation(userId, config);
     await this.cacheCalculation(userId, config.id, calculation);
 
@@ -191,55 +197,104 @@ export class DailySpendingService {
     let expectedRecurringExpenses = 0;
     let goalsReserved = 0;
 
+    // Initialize detailed breakdown arrays
+    const salaryDetails: Array<{date: string, amount: number, description: string}> = [];
+    const recurringIncomeDetails: Array<{date: string, amount: number, description: string, frequency: string}> = [];
+    const recurringExpenseDetails: Array<{date: string, amount: number, description: string, frequency: string}> = [];
+    const upcomingTransactionDetails: Array<{date: string, amount: number, description: string, type: string}> = [];
+
     const { endDate, daysRemaining } = this.calculatePeriodEnd(config);
 
+    console.log('=== DAILY SPENDING CALCULATION DEBUG ===');
+    console.log('User ID:', userId);
+    console.log('Config ID:', config.id);
+    console.log('End Date:', endDate);
+    console.log('Days Remaining:', daysRemaining);
+    console.log('Current Balance:', currentBalance);
+
     if (config.include_pending_salary) {
-      expectedSalary = Number(await this.calculateExpectedSalary(userId, endDate)) || 0;
+      const salaryData = await this.calculateExpectedSalaryDetailed(userId, endDate);
+      expectedSalary = salaryData.total;
+      salaryDetails.push(...salaryData.details);
+      console.log('Expected Salary:', expectedSalary, 'Details:', salaryData.details);
     }
 
     if (config.include_recurring_income) {
-      expectedRecurringIncome = Number(await this.calculateRecurringIncome(userId, endDate)) || 0;
+      const recurringIncomeData = await this.calculateRecurringIncomeDetailed(userId, endDate);
+      expectedRecurringIncome = recurringIncomeData.total;
+      recurringIncomeDetails.push(...recurringIncomeData.details);
+      console.log('Expected Recurring Income:', expectedRecurringIncome, 'Details:', recurringIncomeData.details);
     }
 
     if (config.include_recurring_expenses) {
-      expectedRecurringExpenses = Number(await this.calculateRecurringExpenses(userId, endDate)) || 0;
+      const recurringExpenseData = await this.calculateRecurringExpensesDetailed(userId, endDate);
+      expectedRecurringExpenses = recurringExpenseData.total;
+      recurringExpenseDetails.push(...recurringExpenseData.details);
+      console.log('Expected Recurring Expenses:', expectedRecurringExpenses, 'Details:', recurringExpenseData.details);
     }
 
     if (config.active_goals.length > 0) {
       goalsReserved = Number(await this.calculateGoalsReserved(config.active_goals, daysRemaining)) || 0;
+      console.log('Goals Reserved:', goalsReserved);
     }
 
     const emergencyBuffer = Number(config.emergency_buffer) || 0;
+    console.log('Emergency Buffer:', emergencyBuffer);
 
     // Calculate actual spending for today
     const spentToday = Number(await this.calculateSpentToday(userId)) || 0;
+    console.log('Spent Today:', spentToday);
     
     // Calculate upcoming transactions in the period
-    const upcomingTransactions = Number(await this.calculateUpcomingTransactions(userId, endDate)) || 0;
+    const upcomingTransactionsData = await this.calculateUpcomingTransactionsDetailed(userId, endDate);
+    const upcomingTransactions = upcomingTransactionsData.total;
+    upcomingTransactionDetails.push(...upcomingTransactionsData.details);
+    console.log('Upcoming Transactions Total:', upcomingTransactions);
+    console.log('Upcoming Transactions Details:', upcomingTransactionsData.details);
 
-    // Debug logging
-    console.log('Daily Spending Calculation Debug:', {
-      currentBalance,
-      expectedSalary,
-      expectedRecurringIncome,
-      expectedRecurringExpenses,
-      goalsReserved,
-      emergencyBuffer,
-      daysRemaining,
-      spentToday,
-      upcomingTransactions
-    });
+    // Calculate step by step
+    const step1_startingAmount = currentBalance;
+    const step2_afterSalary = step1_startingAmount + expectedSalary;
+    const step3_afterRecurringIncome = step2_afterSalary + expectedRecurringIncome;
+    const step4_afterRecurringExpenses = step3_afterRecurringIncome - expectedRecurringExpenses;
+    const step5_afterGoals = step4_afterRecurringExpenses - goalsReserved;
+    const step6_afterEmergencyBuffer = step5_afterGoals - emergencyBuffer;
+    const step7_afterUpcomingTransactions = step6_afterEmergencyBuffer - upcomingTransactions;
+    const availableAmount = step7_afterUpcomingTransactions;
 
-    const availableAmount = currentBalance 
-      + expectedSalary 
-      + expectedRecurringIncome 
-      - expectedRecurringExpenses 
-      - goalsReserved 
-      - emergencyBuffer
-      - upcomingTransactions; // Subtract upcoming transactions
+    console.log('=== CALCULATION STEPS ===');
+    console.log('Step 1 - Starting Amount:', step1_startingAmount);
+    console.log('Step 2 - After Salary:', step2_afterSalary);
+    console.log('Step 3 - After Recurring Income:', step3_afterRecurringIncome);
+    console.log('Step 4 - After Recurring Expenses:', step4_afterRecurringExpenses);
+    console.log('Step 5 - After Goals:', step5_afterGoals);
+    console.log('Step 6 - After Emergency Buffer:', step6_afterEmergencyBuffer);
+    console.log('Step 7 - After Upcoming Transactions:', step7_afterUpcomingTransactions);
+    console.log('Final Available Amount:', availableAmount);
 
     const dailyLimit = daysRemaining > 0 ? availableAmount / daysRemaining : 0;
     const remainingToday = Math.max(0, dailyLimit - spentToday);
+
+    console.log('Daily Limit:', dailyLimit);
+    console.log('Remaining Today:', remainingToday);
+    console.log('=== END DEBUG ===');
+
+    // Create detailed calculation formula
+    const calculationFormula = `
+      Starting Balance: ${currentBalance.toFixed(2)}
+      ${expectedSalary > 0 ? `+ Expected Salary: ${expectedSalary.toFixed(2)}` : ''}
+      ${expectedRecurringIncome > 0 ? `+ Recurring Income: ${expectedRecurringIncome.toFixed(2)}` : ''}
+      ${expectedRecurringExpenses > 0 ? `- Recurring Expenses: ${expectedRecurringExpenses.toFixed(2)}` : ''}
+      ${goalsReserved > 0 ? `- Goals Reserved: ${goalsReserved.toFixed(2)}` : ''}
+      ${emergencyBuffer > 0 ? `- Emergency Buffer: ${emergencyBuffer.toFixed(2)}` : ''}
+      ${upcomingTransactions > 0 ? `- Upcoming Transactions: ${upcomingTransactions.toFixed(2)}` : ''}
+      ------------------------------------------------
+      = Available Amount: ${availableAmount.toFixed(2)}
+      ÷ Days Remaining: ${daysRemaining}
+      = Daily Limit: ${dailyLimit.toFixed(2)}
+      - Spent Today: ${spentToday.toFixed(2)}
+      = Remaining Today: ${remainingToday.toFixed(2)}
+    `.trim();
 
     return {
       dailyLimit,
@@ -258,6 +313,26 @@ export class DailySpendingService {
         emergencyBuffer,
         availableAmount,
         periodDays: daysRemaining,
+        // Enhanced detailed breakdown
+        salaryDetails,
+        recurringIncomeDetails,
+        recurringExpenseDetails,
+        upcomingTransactionDetails,
+        calculationSteps: {
+          step1_startingAmount,
+          step2_afterSalary,
+          step3_afterRecurringIncome,
+          step4_afterRecurringExpenses,
+          step5_afterGoals,
+          step6_afterEmergencyBuffer,
+          step7_afterUpcomingTransactions,
+          finalDailyLimit: dailyLimit,
+          spentToday,
+          remainingToday
+        },
+        calculationFormula,
+        endDate: endDate.toISOString(),
+        calculationDate: new Date().toISOString()
       },
     };
   }
@@ -299,43 +374,62 @@ export class DailySpendingService {
     return { endDate, daysRemaining };
   }
 
-  private async calculateExpectedSalary(userId: number, endDate: Date): Promise<number> {
+  private async calculateExpectedSalaryDetailed(userId: number, endDate: Date): Promise<{
+    total: number;
+    details: Array<{date: string, amount: number, description: string}>;
+  }> {
     const userAccounts = await this.accountService.getUserAccounts(userId);
     const accountIds = userAccounts.map(account => account.id);
 
-    if (accountIds.length === 0) return 0;
+    if (accountIds.length === 0) return { total: 0, details: [] };
 
     const salaryPayments = await this.salaryPaymentRepository.find({
       where: { account_id: In(accountIds) },
     });
 
     let totalExpectedSalary = 0;
+    const details: Array<{date: string, amount: number, description: string}> = [];
     const now = new Date();
 
     for (const salary of salaryPayments) {
       const salaryDate = new Date(now.getFullYear(), now.getMonth(), salary.start_day);
       
       if (salaryDate <= endDate && salaryDate >= now) {
-        totalExpectedSalary += Number(salary.expected_amount) || 0;
+        const amount = Number(salary.expected_amount) || 0;
+        totalExpectedSalary += amount;
+        details.push({
+          date: salaryDate.toISOString().split('T')[0],
+          amount,
+          description: `Salary payment on day ${salary.start_day} of month`
+        });
       }
     }
 
-    return totalExpectedSalary;
+    return { total: totalExpectedSalary, details };
   }
 
-  private async calculateRecurringIncome(userId: number, endDate: Date): Promise<number> {
-    return this.calculateRecurringPayments(userId, endDate, 'income');
+  private async calculateRecurringIncomeDetailed(userId: number, endDate: Date): Promise<{
+    total: number;
+    details: Array<{date: string, amount: number, description: string, frequency: string}>;
+  }> {
+    return this.calculateRecurringPaymentsDetailed(userId, endDate, 'income');
   }
 
-  private async calculateRecurringExpenses(userId: number, endDate: Date): Promise<number> {
-    return this.calculateRecurringPayments(userId, endDate, 'expense');
+  private async calculateRecurringExpensesDetailed(userId: number, endDate: Date): Promise<{
+    total: number;
+    details: Array<{date: string, amount: number, description: string, frequency: string}>;
+  }> {
+    return this.calculateRecurringPaymentsDetailed(userId, endDate, 'expense');
   }
 
-  private async calculateRecurringPayments(userId: number, endDate: Date, type: 'income' | 'expense'): Promise<number> {
+  private async calculateRecurringPaymentsDetailed(userId: number, endDate: Date, type: 'income' | 'expense'): Promise<{
+    total: number;
+    details: Array<{date: string, amount: number, description: string, frequency: string}>;
+  }> {
     const userAccounts = await this.accountService.getUserAccounts(userId);
     const accountIds = userAccounts.map(account => account.id);
 
-    if (accountIds.length === 0) return 0;
+    if (accountIds.length === 0) return { total: 0, details: [] };
 
     const recurringPayments = await this.recurringPaymentRepository.find({
       where: { 
@@ -344,17 +438,61 @@ export class DailySpendingService {
       },
     });
 
+    console.log(`=== RECURRING ${type.toUpperCase()} CALCULATION DEBUG ===`);
+    console.log('User Accounts:', accountIds);
+    console.log('End Date for calculation:', endDate);
+    console.log('Current Date:', new Date());
+    console.log(`Found ${recurringPayments.length} recurring ${type} payments:`, recurringPayments.map(p => ({
+      id: p.id,
+      description: p.description,
+      amount: p.amount,
+      start_date: p.start_date,
+      end_date: p.end_date,
+      frequency: p.frequency
+    })));
+
     let totalAmount = 0;
+    const details: Array<{date: string, amount: number, description: string, frequency: string}> = [];
     const now = new Date();
 
     for (const payment of recurringPayments) {
-      if (payment.end_date && new Date(payment.end_date) < now) continue;
+      console.log(`\n--- Processing payment: ${payment.description} ---`);
+      console.log('Payment start date:', payment.start_date);
+      console.log('Payment end date:', payment.end_date);
+      console.log('Current date:', now);
+      console.log('Period end date:', endDate);
+      
+      if (payment.end_date && new Date(payment.end_date) < now) {
+        console.log('Payment has ended, skipping');
+        continue;
+      }
 
       const occurrences = this.calculateOccurrences(payment, now, endDate);
-      totalAmount += occurrences * (Number(payment.amount) || 0);
+      const amount = Number(payment.amount) || 0;
+      const totalForThisPayment = occurrences * amount;
+      
+      console.log('Calculated occurrences:', occurrences);
+      console.log('Amount per occurrence:', amount);
+      console.log('Total for this payment:', totalForThisPayment);
+      
+      totalAmount += totalForThisPayment;
+
+      if (occurrences > 0) {
+        details.push({
+          date: new Date(payment.start_date).toISOString().split('T')[0],
+          amount: totalForThisPayment,
+          description: `${payment.description} (${occurrences} occurrences × ${amount.toFixed(2)})`,
+          frequency: payment.frequency
+        });
+      }
     }
 
-    return totalAmount;
+    console.log(`=== FINAL ${type.toUpperCase()} TOTALS ===`);
+    console.log('Total amount:', totalAmount);
+    console.log('Details:', details);
+    console.log(`=== END ${type.toUpperCase()} DEBUG ===\n`);
+
+    return { total: totalAmount, details };
   }
 
   private calculateOccurrences(payment: RecurringPayment, startDate: Date, endDate: Date): number {
@@ -364,24 +502,73 @@ export class DailySpendingService {
     const start = new Date(Math.max(startDate.getTime(), paymentStartDate.getTime()));
     const end = paymentEndDate ? new Date(Math.min(endDate.getTime(), paymentEndDate.getTime())) : endDate;
 
-    if (start >= end) return 0;
+    console.log(`\n  calculateOccurrences for ${payment.description}:`);
+    console.log('  Period start (now):', startDate.toISOString());
+    console.log('  Period end:', endDate.toISOString());
+    console.log('  Payment start date:', paymentStartDate.toISOString());
+    console.log('  Payment end date:', paymentEndDate?.toISOString() || 'No end date');
+    console.log('  Effective start:', start.toISOString());
+    console.log('  Effective end:', end.toISOString());
+    console.log('  start >= end?', start >= end);
+
+    if (start >= end) {
+      console.log('  Returning 0 occurrences (start >= end)');
+      return 0;
+    }
 
     const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+    console.log('  Days difference:', daysDiff);
 
+    let occurrences = 0;
     switch (payment.frequency) {
       case 'daily':
-        return daysDiff;
+        occurrences = daysDiff;
+        break;
       
       case 'weekly':
-        return Math.floor(daysDiff / 7);
+        occurrences = Math.floor(daysDiff / 7);
+        break;
       
       case 'monthly':
+        // Calculate months between start and end
         const monthsDiff = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
-        return Math.max(0, monthsDiff);
+        
+        // If start and end are in the same month, check if the payment date falls within the period
+        if (monthsDiff === 0) {
+          // Same month - check if payment should occur in this month
+          const paymentDay = paymentStartDate.getDate();
+          const startDay = start.getDate();
+          const endDay = end.getDate();
+          
+          // If the payment day is within the period, count it as 1 occurrence
+          if (paymentDay >= startDay && paymentDay <= endDay) {
+            occurrences = 1;
+          } else {
+            occurrences = 0;
+          }
+          console.log('  Same month calculation:');
+          console.log('    Payment day:', paymentDay);
+          console.log('    Start day:', startDay);
+          console.log('    End day:', endDay);
+          console.log('    Payment falls within period:', paymentDay >= startDay && paymentDay <= endDay);
+        } else {
+          // Different months - use the original logic but add 1 to include the current month
+          occurrences = Math.max(0, monthsDiff + 1);
+        }
+        
+        console.log('  Months difference calculation:');
+        console.log('    End year/month:', end.getFullYear(), end.getMonth());
+        console.log('    Start year/month:', start.getFullYear(), start.getMonth());
+        console.log('    Months diff:', monthsDiff);
+        break;
       
       default:
-        return 0;
+        occurrences = 0;
+        break;
     }
+
+    console.log(`  Final occurrences for ${payment.frequency} frequency:`, occurrences);
+    return occurrences;
   }
 
   private async calculateGoalsReserved(goalIds: number[], daysRemaining: number): Promise<number> {
@@ -410,13 +597,6 @@ export class DailySpendingService {
     return totalReserved;
   }
 
-  private async getCachedCalculation(configId: number): Promise<DailySpendingCache | null> {
-    return this.cacheRepository.findOne({
-      where: { config_id: configId },
-      order: { created_at: 'DESC' },
-    });
-  }
-
   private async cacheCalculation(userId: number, configId: number, calculation: DailySpendingCalculation): Promise<void> {
     const cacheExpiry = new Date(Date.now() + 30 * 60 * 1000);
 
@@ -443,7 +623,10 @@ export class DailySpendingService {
   }
 
   async clearUserCaches(userId: number): Promise<void> {
-    await this.cacheRepository.delete({ user_id: userId });
+    const userConfigs = await this.getUserConfigs(userId);
+    for (const config of userConfigs) {
+      await this.clearCache(config.id);
+    }
   }
 
   async deleteConfig(configId: number, userId: number): Promise<void> {
@@ -480,26 +663,53 @@ export class DailySpendingService {
     return Number(result?.total) || 0;
   }
 
-  private async calculateUpcomingTransactions(userId: number, endDate: Date): Promise<number> {
+  private async calculateUpcomingTransactionsDetailed(userId: number, endDate: Date): Promise<{
+    total: number;
+    details: Array<{date: string, amount: number, description: string, type: string}>;
+  }> {
     const userAccounts = await this.accountService.getUserAccounts(userId);
     const accountIds = userAccounts.map(account => account.id);
 
-    if (accountIds.length === 0) return 0;
+    if (accountIds.length === 0) return { total: 0, details: [] };
 
-    const now = new Date();
-    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const today = new Date();
+    const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const tomorrowMidnight = new Date(todayMidnight.getTime() + 24 * 60 * 60 * 1000);
 
-    // Get upcoming expense transactions between tomorrow and end date
-    const result = await this.transactionRepository
+    // Get regular upcoming transactions (non-recurring)
+    const upcomingTransactions = await this.transactionRepository
       .createQueryBuilder('transaction')
       .innerJoin('transaction.account', 'account')
-      .select('SUM(transaction.amount)', 'total')
       .where('account.id IN (:...accountIds)', { accountIds })
-      .andWhere('transaction.type = :type', { type: 'expense' })
-      .andWhere('transaction.transaction_date >= :tomorrow', { tomorrow })
+      .andWhere('transaction.transaction_date >= :tomorrow', { tomorrow: tomorrowMidnight })
       .andWhere('transaction.transaction_date <= :endDate', { endDate })
-      .getRawOne();
+      .getMany();
 
-    return Number(result?.total) || 0;
+    let totalAmount = 0;
+    const details: Array<{date: string, amount: number, description: string, type: string}> = [];
+
+    // Add regular transactions with proper sign handling
+    for (const transaction of upcomingTransactions) {
+      const amount = Number(transaction.amount) || 0;
+      // For the total, expenses are positive (money going out), income is negative (money coming in)
+      const totalAmount_adjustment = transaction.type === 'expense' ? amount : -amount;
+      totalAmount += totalAmount_adjustment;
+      
+      details.push({
+        date: new Date(transaction.transaction_date).toISOString().split('T')[0],
+        amount: amount, // Always show positive amount in the detailed list
+        description: transaction.description,
+        type: transaction.type
+      });
+    }
+
+    // Add debug logging
+    console.log('Upcoming Transactions Debug:', {
+      transactionCount: upcomingTransactions.length,
+      totalAmount,
+      details
+    });
+
+    return { total: totalAmount, details };
   }
 }
