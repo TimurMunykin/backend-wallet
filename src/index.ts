@@ -145,6 +145,15 @@ app.get('/health', (_req, res) => {
   });
 });
 
+app.get('/api/ping', (_req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Pong! API is reachable',
+    timestamp: new Date().toISOString(),
+    server: 'backend-wallet-api',
+  });
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/accounts', accountRoutes);
 app.use('/api/daily-spending', dailySpendingRoutes);

@@ -56,6 +56,22 @@ services:
       - redis_dev_data:/data
     restart: unless-stopped
 
+  mcp-server:
+    build: 
+      context: ./mcp-server
+      dockerfile: Dockerfile.dev
+    environment:
+      - NODE_ENV=development
+      - BACKEND_API_URL=http://app:3000/api
+      - DEMO_AUTH_TOKEN=demo-token
+    volumes:
+      - ./mcp-server:/app
+      - /app/node_modules
+    depends_on:
+      - app
+    restart: unless-stopped
+    # MCP servers typically use stdio transport, but we keep it isolated for dev purposes
+
 volumes:
   postgres_dev_data:
   redis_dev_data:

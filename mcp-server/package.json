@@ -1,0 +1,38 @@
+{
+  "name": "backend-wallet-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for backend wallet API",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "node dist/index.js",
+    "dev": "nodemon",
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "prebuild": "npm run clean",
+    "test": "npm run build && node test/demo.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "finance",
+    "wallet",
+    "backend"
+  ],
+  "author": "Finance App Team",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.6.0",
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.5.0",
+    "nodemon": "^3.0.1",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.1.6"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+} 

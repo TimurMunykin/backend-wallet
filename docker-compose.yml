@@ -43,6 +43,17 @@ services:
       - redis_data:/data
     restart: unless-stopped
 
+  mcp-server:
+    build: ./mcp-server
+    environment:
+      - NODE_ENV=production
+      - BACKEND_API_URL=http://app:3000/api
+      - DEMO_AUTH_TOKEN=demo-token
+    depends_on:
+      - app
+    restart: unless-stopped
+    # MCP servers typically use stdio transport, but we keep it isolated for production purposes
+
 volumes:
   postgres_data:
   redis_data:
