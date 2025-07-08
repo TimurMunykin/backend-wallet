@@ -112,7 +112,10 @@ export class AccountService {
 
   async getTotalBalance(userId: number): Promise<number> {
     const accounts = await this.getUserAccounts(userId);
-    return accounts.reduce((total, account) => total + account.balance, 0);
+    return accounts.reduce((total, account) => {
+      const balance = Number(account.balance) || 0;
+      return total + balance;
+    }, 0);
   }
 
   async getAccountTransactionSummary(accountId: number, userId: number): Promise<{

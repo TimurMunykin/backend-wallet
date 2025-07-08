@@ -115,13 +115,16 @@ export class GoalService {
       throw new Error('Goal not found');
     }
 
-    const totalNeeded = goal.target_amount + goal.min_balance;
+    const targetAmount = Number(goal.target_amount) || 0;
+    const minBalance = Number(goal.min_balance) || 0;
+    const totalNeeded = targetAmount + minBalance;
     const progress = Math.min((currentBalance / totalNeeded) * 100, 100);
     const remainingAmount = Math.max(totalNeeded - currentBalance, 0);
     
     const now = new Date();
+    const targetDate = new Date(goal.target_date);
     const daysRemaining = Math.max(
-      Math.ceil((goal.target_date.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)),
+      Math.ceil((targetDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)),
       0
     );
 
@@ -172,7 +175,9 @@ export class GoalService {
     const goals = await query.getMany();
     
     return goals.reduce((total, goal) => {
-      return total + goal.target_amount + goal.min_balance;
+      const targetAmount = Number(goal.target_amount) || 0;
+      const minBalance = Number(goal.min_balance) || 0;
+      return total + targetAmount + minBalance;
     }, 0);
   }
 }

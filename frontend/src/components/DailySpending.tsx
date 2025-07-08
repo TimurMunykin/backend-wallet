@@ -34,9 +34,31 @@ import {
   AccordionDetails,
   List,
   ListItem,
-  ListItemText
+  ListItemText,
+  Checkbox,
+  ListItemIcon,
+  Slider,
+  FormLabel
 } from '@mui/material'
-import { Add, Delete, Settings, Calculate, CheckCircle, ExpandMore } from '@mui/icons-material'
+import { Add, Delete, Settings, Calculate, CheckCircle, ExpandMore, TrendingUp, Flag } from '@mui/icons-material'
+
+interface Goal {
+  id: number
+  title: string
+  target_amount: number
+  min_balance: number
+  target_date: string
+  description?: string
+  achieved: boolean
+}
+
+interface GoalProgress {
+  goal: Goal
+  progress: number
+  remainingAmount: number
+  daysRemaining: number
+  dailyTargetAmount: number
+}
 
 interface DailySpendingConfig {
   id: number
@@ -98,6 +120,8 @@ interface DailySpendingCalculation {
 export default function DailySpending() {
   const [configs, setConfigs] = useState<DailySpendingConfig[]>([])
   const [calculation, setCalculation] = useState<DailySpendingCalculation | null>(null)
+  const [goals, setGoals] = useState<Goal[]>([])
+  const [goalsProgress, setGoalsProgress] = useState<GoalProgress[]>([])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [calculationLoading, setCalculationLoading] = useState(false)
@@ -110,11 +134,15 @@ export default function DailySpending() {
     includeSalary: true,
     includeRecurringIncome: true,
     includeRecurringExpenses: true,
-    emergencyBuffer: ''
+    emergencyBuffer: '',
+    activeGoals: [] as number[],
+    goalPriorities: {} as Record<number, number>
   })
 
   useEffect(() => {
     fetchConfigs()
+    fetchGoals()
+    fetchGoalsProgress()
     calculateDailySpending()
   }, [])
 
@@ -135,6 +163,40 @@ export default function DailySpending() {
       console.error('Error fetching configs:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchGoals = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch('/api/goals', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      if (response.ok) {
+        const result = await response.json()
+        setGoals(result.data || [])
+      }
+    } catch (error) {
+      console.error('Error fetching goals:', error)
+    }
+  }
+
+  const fetchGoalsProgress = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch('/api/goals/progress', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      if (response.ok) {
+        const result = await response.json()
+        setGoalsProgress(result.data || [])
+      }
+    } catch (error) {
+      console.error('Error fetching goals progress:', error)
     }
   }
 
@@ -172,26 +234,30 @@ export default function DailySpending() {
   const handleSubmit = async () => {
     try {
       const token = localStorage.getItem('token')
+      
+      const payload = {
+        name: formData.name,
+        periodType: formData.periodType,
+        ...(formData.periodType === 'custom_days' ? { customDays: parseInt(formData.periodValue) } : {}),
+        ...(formData.periodType === 'to_date' ? { customEndDate: formData.targetDate } : {}),
+        ...(formData.periodType === 'to_salary' ? { salaryDate: formData.salaryDate } : {}),
+        includePendingSalary: formData.includeSalary,
+        includeRecurringIncome: formData.includeRecurringIncome,
+        includeRecurringExpenses: formData.includeRecurringExpenses,
+        emergencyBuffer: parseFloat(formData.emergencyBuffer) || 0,
+        activeGoals: formData.activeGoals,
+        goalPriorities: formData.goalPriorities
+      }
+
       const response = await fetch('/api/daily-spending/configs', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          name: formData.name,
-          periodType: formData.periodType,
-          customDays: formData.periodValue ? parseInt(formData.periodValue) : undefined,
-          customEndDate: formData.targetDate || undefined,
-          salaryDate: formData.salaryDate || undefined,
-          includePendingSalary: formData.includeSalary,
-          includeRecurringIncome: formData.includeRecurringIncome,
-          includeRecurringExpenses: formData.includeRecurringExpenses,
-          activeGoals: [],
-          emergencyBuffer: formData.emergencyBuffer ? parseFloat(formData.emergencyBuffer) : 0
-        })
+        body: JSON.stringify(payload)
       })
-      
+
       if (response.ok) {
         setOpen(false)
         setFormData({
@@ -203,16 +269,64 @@ export default function DailySpending() {
           includeSalary: true,
           includeRecurringIncome: true,
           includeRecurringExpenses: true,
-          emergencyBuffer: ''
+          emergencyBuffer: '',
+          activeGoals: [],
+          goalPriorities: {}
         })
         fetchConfigs()
       }
     } catch (error) {
-      console.error('Error creating config:', error)
+      console.error('Error saving config:', error)
     }
   }
 
-  const handleActivate = async (configId: number) => {
+  const handleGoalToggle = (goalId: number) => {
+    const newActiveGoals = formData.activeGoals.includes(goalId)
+      ? formData.activeGoals.filter(id => id !== goalId)
+      : [...formData.activeGoals, goalId]
+    
+    // If goals are selected, automatically set period to goal-based
+    let updatedFormData = {
+      ...formData,
+      activeGoals: newActiveGoals
+    }
+
+    // If we have active goals, set the period to the earliest goal target date
+    if (newActiveGoals.length > 0) {
+      const selectedGoals = goals.filter(goal => newActiveGoals.includes(goal.id))
+      const earliestTargetDate = selectedGoals.reduce((earliest, goal) => {
+        const goalDate = new Date(goal.target_date)
+        return goalDate < earliest ? goalDate : earliest
+      }, new Date(selectedGoals[0].target_date))
+
+      updatedFormData = {
+        ...updatedFormData,
+        periodType: 'to_date',
+        targetDate: earliestTargetDate.toISOString().split('T')[0]
+      }
+    } else {
+      // If no goals selected, reset to default period type
+      updatedFormData = {
+        ...updatedFormData,
+        periodType: 'to_month_end',
+        targetDate: ''
+      }
+    }
+    
+    setFormData(updatedFormData)
+  }
+
+  const handleGoalPriorityChange = (goalId: number, priority: number) => {
+    setFormData({
+      ...formData,
+      goalPriorities: {
+        ...formData.goalPriorities,
+        [goalId]: priority
+      }
+    })
+  }
+
+  const activateConfig = async (configId: number) => {
     try {
       const token = localStorage.getItem('token')
       const response = await fetch(`/api/daily-spending/configs/${configId}/activate`, {
@@ -221,7 +335,6 @@ export default function DailySpending() {
           'Authorization': `Bearer ${token}`
         }
       })
-      
       if (response.ok) {
         fetchConfigs()
         calculateDailySpending(configId)
@@ -231,62 +344,68 @@ export default function DailySpending() {
     }
   }
 
-  const handleDelete = async (configId: number) => {
-    try {
-      const token = localStorage.getItem('token')
-      const response = await fetch(`/api/daily-spending/configs/${configId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
+  const deleteConfig = async (configId: number) => {
+    if (window.confirm('Are you sure you want to delete this configuration?')) {
+      try {
+        const token = localStorage.getItem('token')
+        const response = await fetch(`/api/daily-spending/configs/${configId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        if (response.ok) {
+          fetchConfigs()
+          if (calculation) {
+            calculateDailySpending()
+          }
         }
-      })
-      
-      if (response.ok) {
-        fetchConfigs()
-        calculateDailySpending()
+      } catch (error) {
+        console.error('Error deleting config:', error)
       }
-    } catch (error) {
-      console.error('Error deleting config:', error)
     }
   }
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD'
+      currency: 'USD',
     }).format(amount)
   }
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
       month: 'short',
-      day: 'numeric',
-      year: 'numeric'
+      day: 'numeric'
     })
   }
 
-  const getPeriodLabel = (config: DailySpendingConfig) => {
-    switch (config.period_type) {
-      case 'to_salary':
-        return 'Until next salary'
-      case 'to_month_end':
-        return 'Until month end'
-      case 'custom_days':
-        return `${config.custom_days} days`
-      case 'to_date':
-        return 'Until specific date'
-      default:
-        return config.period_type
-    }
+  const getGoalProgressColor = (progress: number) => {
+    if (progress >= 100) return 'success'
+    if (progress >= 75) return 'info'
+    if (progress >= 50) return 'warning'
+    return 'error'
+  }
+
+  const getGoalPriorityLabel = (daysRemaining: number) => {
+    if (daysRemaining <= 0) return 'Overdue'
+    if (daysRemaining <= 30) return 'Urgent'
+    if (daysRemaining <= 90) return 'Soon'
+    return 'Long-term'
+  }
+
+  const getGoalPriorityColor = (daysRemaining: number) => {
+    if (daysRemaining <= 0) return 'error'
+    if (daysRemaining <= 30) return 'warning'
+    if (daysRemaining <= 90) return 'info'
+    return 'primary'
   }
 
   if (loading) {
     return (
-      <Box>
-        <Typography variant="h4" gutterBottom>
-          Daily Spending Calculator
-        </Typography>
-        <Typography>Loading...</Typography>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+        <CircularProgress />
       </Box>
     )
   }
@@ -400,6 +519,48 @@ export default function DailySpending() {
         </CardContent>
       </Card>
 
+      {/* Goals Overview */}
+      {goalsProgress.length > 0 && (
+        <Card sx={{ mb: 3 }}>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>
+              🎯 Active Goals Overview
+            </Typography>
+            <Grid container spacing={2}>
+              {goalsProgress.map((goalProgress) => (
+                <Grid item xs={12} md={6} key={goalProgress.goal.id}>
+                  <Card variant="outlined">
+                    <CardContent>
+                      <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                        <Typography variant="subtitle1">
+                          {goalProgress.goal.title}
+                        </Typography>
+                        <Chip
+                          label={getGoalPriorityLabel(goalProgress.daysRemaining)}
+                          color={getGoalPriorityColor(goalProgress.daysRemaining)}
+                          size="small"
+                        />
+                      </Box>
+                      <Typography variant="body2" color="textSecondary" gutterBottom>
+                        {formatCurrency(goalProgress.remainingAmount)} remaining • {goalProgress.daysRemaining} days
+                      </Typography>
+                      <Box display="flex" alignItems="center" gap={1}>
+                        <Typography variant="body2" color="primary">
+                          {formatCurrency(goalProgress.dailyTargetAmount)}/day
+                        </Typography>
+                        <Typography variant="body2">
+                          ({Math.round(goalProgress.progress)}% complete)
+                        </Typography>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          </CardContent>
+        </Card>
+      )}
+
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h5">
           Spending Configurations
@@ -413,72 +574,92 @@ export default function DailySpending() {
         </Button>
       </Box>
 
-      {configs.length === 0 ? (
-        <Alert severity="info" sx={{ mb: 3 }}>
-          No configurations found. Create your first daily spending configuration to get started.
-        </Alert>
-      ) : (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>Period</TableCell>
-                <TableCell>Emergency Buffer</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {configs.map((config) => (
-                <TableRow key={config.id}>
-                  <TableCell>{config.name}</TableCell>
-                  <TableCell>{getPeriodLabel(config)}</TableCell>
-                  <TableCell>{formatCurrency(parseFloat(config.emergency_buffer))}</TableCell>
-                  <TableCell>
-                    {config.is_active ? (
-                      <Chip 
-                        label="Active" 
-                        color="success"
-                        size="small"
-                        icon={<CheckCircle />}
-                      />
-                    ) : (
-                      <Chip 
-                        label="Inactive" 
-                        color="default"
-                        size="small"
-                      />
-                    )}
-                  </TableCell>
-                  <TableCell>
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Configuration</TableCell>
+              <TableCell>Period Type</TableCell>
+              <TableCell>Active Goals</TableCell>
+              <TableCell>Emergency Buffer</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell>Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {configs.map((config) => (
+              <TableRow key={config.id}>
+                <TableCell>{config.name}</TableCell>
+                <TableCell>
+                  <Chip 
+                    label={config.period_type.replace('_', ' ').toUpperCase()} 
+                    size="small" 
+                    variant="outlined"
+                  />
+                </TableCell>
+                <TableCell>
+                  {config.active_goals.length > 0 ? (
+                    <Box>
+                      {config.active_goals.map(goalId => {
+                        const goal = goals.find(g => g.id === goalId)
+                        return goal ? (
+                          <Chip 
+                            key={goalId}
+                            label={goal.title}
+                            size="small"
+                            color="primary"
+                            variant="outlined"
+                            sx={{ mr: 0.5, mb: 0.5 }}
+                          />
+                        ) : null
+                      })}
+                    </Box>
+                  ) : (
+                    <Typography variant="body2" color="textSecondary">
+                      No goals selected
+                    </Typography>
+                  )}
+                </TableCell>
+                <TableCell>
+                  {formatCurrency(parseFloat(config.emergency_buffer))}
+                </TableCell>
+                <TableCell>
+                  {config.is_active ? (
+                    <Chip label="Active" color="success" size="small" />
+                  ) : (
+                    <Chip label="Inactive" color="default" size="small" />
+                  )}
+                </TableCell>
+                <TableCell>
+                  <Box>
                     {!config.is_active && (
                       <Button
                         size="small"
                         variant="outlined"
-                        onClick={() => handleActivate(config.id)}
+                        onClick={() => activateConfig(config.id)}
                         sx={{ mr: 1 }}
                       >
                         Activate
                       </Button>
                     )}
-                    <IconButton 
-                      size="small" 
+                    <IconButton
+                      size="small"
+                      onClick={() => deleteConfig(config.id)}
                       color="error"
-                      onClick={() => handleDelete(config.id)}
                     >
                       <Delete />
                     </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      )}
+                  </Box>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
 
-      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Create Daily Spending Configuration</DialogTitle>
+      {/* Create Configuration Dialog */}
+      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Create New Configuration</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12}>
@@ -487,25 +668,31 @@ export default function DailySpending() {
                 label="Configuration Name"
                 value={formData.name}
                 onChange={(e) => setFormData({...formData, name: e.target.value})}
+                required
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid item xs={12} sm={6}>
               <FormControl fullWidth>
                 <InputLabel>Period Type</InputLabel>
                 <Select
                   value={formData.periodType}
-                  label="Period Type"
                   onChange={(e) => setFormData({...formData, periodType: e.target.value as any})}
+                  disabled={formData.activeGoals.length > 0}
                 >
-                  <MenuItem value="to_salary">Until Next Salary</MenuItem>
-                  <MenuItem value="to_month_end">Until Month End</MenuItem>
+                  <MenuItem value="to_month_end">Until End of Month</MenuItem>
                   <MenuItem value="custom_days">Custom Days</MenuItem>
                   <MenuItem value="to_date">Until Specific Date</MenuItem>
+                  <MenuItem value="to_salary">Until Salary Date</MenuItem>
                 </Select>
               </FormControl>
+              {formData.activeGoals.length > 0 && (
+                <Typography variant="caption" color="primary" sx={{ mt: 1, display: 'block' }}>
+                  🎯 Period automatically set to match your selected goal(s)
+                </Typography>
+              )}
             </Grid>
             {formData.periodType === 'custom_days' && (
-              <Grid item xs={12}>
+              <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
                   type="number"
@@ -516,11 +703,11 @@ export default function DailySpending() {
               </Grid>
             )}
             {formData.periodType === 'to_salary' && (
-              <Grid item xs={12}>
+              <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
                   type="date"
-                  label="Next Salary Date"
+                  label="Salary Date"
                   value={formData.salaryDate}
                   onChange={(e) => setFormData({...formData, salaryDate: e.target.value})}
                   InputLabelProps={{
@@ -530,17 +717,37 @@ export default function DailySpending() {
               </Grid>
             )}
             {formData.periodType === 'to_date' && (
-              <Grid item xs={12}>
+              <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
                   type="date"
                   label="Target Date"
                   value={formData.targetDate}
                   onChange={(e) => setFormData({...formData, targetDate: e.target.value})}
+                  disabled={formData.activeGoals.length > 0}
                   InputLabelProps={{
                     shrink: true,
                   }}
                 />
+                {formData.activeGoals.length > 0 && formData.targetDate && (
+                  <Typography variant="caption" color="primary" sx={{ mt: 1, display: 'block' }}>
+                    🗓️ Automatically set to: {formatDate(formData.targetDate)}
+                    {(() => {
+                      const selectedGoals = goals.filter(goal => formData.activeGoals.includes(goal.id))
+                      if (selectedGoals.length === 1) {
+                        return ` (${selectedGoals[0].title} target date)`
+                      } else if (selectedGoals.length > 1) {
+                        const earliestGoal = selectedGoals.reduce((earliest, goal) => {
+                          const goalDate = new Date(goal.target_date)
+                          const earliestDate = new Date(earliest.target_date)
+                          return goalDate < earliestDate ? goal : earliest
+                        })
+                        return ` (earliest goal: ${earliestGoal.title})`
+                      }
+                      return ''
+                    })()}
+                  </Typography>
+                )}
               </Grid>
             )}
             <Grid item xs={12}>
@@ -550,6 +757,9 @@ export default function DailySpending() {
                 label="Emergency Buffer"
                 value={formData.emergencyBuffer}
                 onChange={(e) => setFormData({...formData, emergencyBuffer: e.target.value})}
+                InputProps={{
+                  startAdornment: '$',
+                }}
               />
             </Grid>
             <Grid item xs={12}>
@@ -585,12 +795,89 @@ export default function DailySpending() {
                 label="Include Recurring Expenses"
               />
             </Grid>
+            
+            {/* Goals Selection */}
+            <Grid item xs={12}>
+              <Typography variant="h6" gutterBottom>
+                🎯 Select Goals to Include
+              </Typography>
+              <Typography variant="body2" color="textSecondary" gutterBottom>
+                Choose which goals should be factored into your daily spending calculation.
+              </Typography>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                💡 <strong>Smart Period Setting:</strong> When you select goals, the calculation period will automatically be set to your goal's target date. This ensures your daily spending is perfectly aligned with achieving your goals on time!
+              </Alert>
+              {goals.filter(goal => !goal.achieved).length === 0 ? (
+                <Alert severity="info">
+                  No active goals found. <Button href="/goals" size="small">Create a goal</Button> to get started.
+                </Alert>
+              ) : (
+                <Box>
+                  {goals.filter(goal => !goal.achieved).map((goal) => {
+                    const goalProgress = goalsProgress.find(gp => gp.goal.id === goal.id)
+                    const isSelected = formData.activeGoals.includes(goal.id)
+                    
+                    return (
+                      <Box key={goal.id} mb={2}>
+                        <Card variant="outlined">
+                          <CardContent>
+                            <Box display="flex" alignItems="center" mb={1}>
+                              <Checkbox
+                                checked={isSelected}
+                                onChange={() => handleGoalToggle(goal.id)}
+                              />
+                              <Box flex={1}>
+                                <Typography variant="subtitle1">
+                                  {goal.title}
+                                </Typography>
+                                <Typography variant="body2" color="textSecondary">
+                                  {formatCurrency(goal.target_amount)} by {formatDate(goal.target_date)}
+                                </Typography>
+                                {goalProgress && (
+                                  <Box display="flex" alignItems="center" gap={1} mt={1}>
+                                    <Chip
+                                      label={`${Math.round(goalProgress.progress)}% complete`}
+                                      color={getGoalProgressColor(goalProgress.progress)}
+                                      size="small"
+                                    />
+                                    <Typography variant="body2">
+                                      {formatCurrency(goalProgress.dailyTargetAmount)}/day needed
+                                    </Typography>
+                                  </Box>
+                                )}
+                              </Box>
+                            </Box>
+                            
+                            {isSelected && (
+                              <Box mt={2}>
+                                <FormLabel component="legend">
+                                  Priority Level (1 = Highest, 5 = Lowest)
+                                </FormLabel>
+                                <Slider
+                                  value={formData.goalPriorities[goal.id] || 3}
+                                  onChange={(_, value) => handleGoalPriorityChange(goal.id, value as number)}
+                                  step={1}
+                                  marks
+                                  min={1}
+                                  max={5}
+                                  valueLabelDisplay="auto"
+                                />
+                              </Box>
+                            )}
+                          </CardContent>
+                        </Card>
+                      </Box>
+                    )
+                  })}
+                </Box>
+              )}
+            </Grid>
           </Grid>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)}>Cancel</Button>
           <Button onClick={handleSubmit} variant="contained">
-            Create
+            Create Configuration
           </Button>
         </DialogActions>
       </Dialog>
@@ -606,21 +893,7 @@ export default function DailySpending() {
             </AccordionSummary>
             <AccordionDetails>
               <Grid container spacing={3}>
-                {/* Calculation Formula */}
-                <Grid item xs={12} md={6}>
-                  <Card>
-                    <CardContent>
-                      <Typography variant="h6" gutterBottom>
-                        📊 Calculation Formula
-                      </Typography>
-                      <Box sx={{ fontFamily: 'monospace', fontSize: '0.9rem', whiteSpace: 'pre-line', bgcolor: '#f5f5f5', p: 2, borderRadius: 1 }}>
-                        {calculation.breakdown.calculationFormula}
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
-
-                {/* Step-by-Step Breakdown */}
+                {/* Calculation Steps */}
                 <Grid item xs={12} md={6}>
                   <Card>
                     <CardContent>
@@ -695,24 +968,40 @@ export default function DailySpending() {
                             secondary={formatCurrency(calculation.breakdown.calculationSteps.finalDailyLimit)}
                           />
                         </ListItem>
-                        <ListItem>
-                          <ListItemText 
-                            primary="- Spent Today"
-                            secondary={formatCurrency(calculation.spentToday)}
-                          />
-                        </ListItem>
                       </List>
                     </CardContent>
                   </Card>
                 </Grid>
 
-                {/* Detailed Transaction Lists */}
+                {/* Goals Impact */}
+                {calculation.breakdown.goalsReserved > 0 && (
+                  <Grid item xs={12} md={6}>
+                    <Card>
+                      <CardContent>
+                        <Typography variant="h6" gutterBottom>
+                          🎯 Goals Impact
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary" gutterBottom>
+                          Amount reserved for achieving your selected goals
+                        </Typography>
+                        <Typography variant="h5" color="primary">
+                          {formatCurrency(calculation.breakdown.goalsReserved)}
+                        </Typography>
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                          This amount is automatically set aside to help you reach your goals on time.
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                )}
+
+                {/* Remaining sections... */}
                 {calculation.breakdown.salaryDetails.length > 0 && (
                   <Grid item xs={12} md={6}>
                     <Card>
                       <CardContent>
                         <Typography variant="h6" gutterBottom>
-                          💰 Expected Salary Payments
+                          💰 Expected Salary
                         </Typography>
                         <TableContainer>
                           <Table size="small">
@@ -816,7 +1105,7 @@ export default function DailySpending() {
                     <Card>
                       <CardContent>
                         <Typography variant="h6" gutterBottom>
-                          🕐 Upcoming Transactions
+                          ⏰ Upcoming Transactions
                         </Typography>
                         <TableContainer>
                           <Table size="small">
@@ -835,7 +1124,11 @@ export default function DailySpending() {
                                   <TableCell>{formatCurrency(item.amount)}</TableCell>
                                   <TableCell>{item.description}</TableCell>
                                   <TableCell>
-                                    <Chip label={item.type} size="small" color="warning" />
+                                    <Chip 
+                                      label={item.type} 
+                                      size="small" 
+                                      color={item.type === 'income' ? 'success' : 'error'} 
+                                    />
                                   </TableCell>
                                 </TableRow>
                               ))}
@@ -846,29 +1139,6 @@ export default function DailySpending() {
                     </Card>
                   </Grid>
                 )}
-
-                {/* Calculation Metadata */}
-                <Grid item xs={12}>
-                  <Card>
-                    <CardContent>
-                      <Typography variant="h6" gutterBottom>
-                        📝 Calculation Info
-                      </Typography>
-                      <Grid container spacing={2}>
-                        <Grid item xs={12} sm={6}>
-                          <Typography variant="body2" color="textSecondary">
-                            Calculation Date: {formatDate(calculation.breakdown.calculationDate)}
-                          </Typography>
-                        </Grid>
-                        <Grid item xs={12} sm={6}>
-                          <Typography variant="body2" color="textSecondary">
-                            Target End Date: {formatDate(calculation.breakdown.endDate)}
-                          </Typography>
-                        </Grid>
-                      </Grid>
-                    </CardContent>
-                  </Card>
-                </Grid>
               </Grid>
             </AccordionDetails>
           </Accordion>
