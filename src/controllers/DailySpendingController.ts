@@ -313,7 +313,7 @@ export class DailySpendingController {
    *                 type: string
    *               periodType:
    *                 type: string
-   *                 enum: [toSalary, toMonthEnd, customDays, toSpecificDate]
+   *                 enum: [to_salary, to_month_end, custom_days, to_date]
    *               periodValue:
    *                 type: integer
    *               includeSalary:

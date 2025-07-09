@@ -11,7 +11,7 @@ class BackendWalletMcpServer {
   constructor() {
     this.apiBaseUrl = process.env.BACKEND_API_URL || "http://localhost:3000/api";
     // For STDIO transport, get auth token from environment
-    this.authToken = process.env.BACKEND_AUTH_TOKEN || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjIsImVtYWlsIjoiYWFhYXRlc3QyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjAwNjEwNCwiZXhwIjoxNzUyMDA5NzA0LCJhdWQiOiJmaW5hbmNlLWFwcC11c2VycyIsImlzcyI6ImZpbmFuY2UtYXBwIn0.jGXI92xXmctR0SHirXXF57aKoPPw8OoUDVb5H8yV7CE";
+    this.authToken = process.env.BACKEND_AUTH_TOKEN || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjIsImVtYWlsIjoiYWFhYXRlc3QyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjA3ODgwMSwiZXhwIjoxNzUyMDgyNDAxLCJhdWQiOiJmaW5hbmNlLWFwcC11c2VycyIsImlzcyI6ImZpbmFuY2UtYXBwIn0.lPvNPYea9wePQgVwOHgn-kik0DdXvY0jTiULotDoqMo";
   }
 
   async initialize() {
@@ -671,7 +671,7 @@ class BackendWalletMcpServer {
                 },
                 periodType: {
                   type: "string",
-                  enum: ["toSalary", "toMonthEnd", "customDays", "toSpecificDate"],
+                  enum: ["to_salary", "to_month_end", "custom_days", "to_date"],
                   description: "New period type",
                 },
                 periodValue: {
