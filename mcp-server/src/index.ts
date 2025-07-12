@@ -15,33 +15,42 @@ class BackendWalletMcpServer {
   }
 
   async initialize() {
-    // Dynamic import for ES modules
-    const { Server } = await import("@modelcontextprotocol/sdk/server/index.js");
-    const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
-    const {
-      ListToolsRequestSchema,
-      CallToolRequestSchema,
-      ErrorCode,
-      McpError,
-    } = await import("@modelcontextprotocol/sdk/types.js");
+    try {
+      // Dynamic import for ES modules
+      const { Server } = await import("@modelcontextprotocol/sdk/server/index.js");
+      const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
+      const {
+        ListToolsRequestSchema,
+        CallToolRequestSchema,
+        ErrorCode,
+        McpError,
+      } = await import("@modelcontextprotocol/sdk/types.js");
 
-    this.server = new Server({
-      name: "backend-wallet-mcp-server",
-      version: "1.0.0",
-    }, {
-      capabilities: {
-        tools: {},
-      },
-    });
+      this.server = new Server({
+        name: "backend-wallet-mcp-server",
+        version: "1.0.0",
+      }, {
+        capabilities: {
+          tools: {},
+        },
+      });
 
-    // Store the imported classes for later use
-    this.setupHandlers(ListToolsRequestSchema, CallToolRequestSchema, ErrorCode, McpError);
-    
-    return { StdioServerTransport };
+      // Store the imported classes for later use
+      this.setupHandlers(ListToolsRequestSchema, CallToolRequestSchema, ErrorCode, McpError);
+      
+      console.error("MCP server initialized successfully");
+      
+      return { StdioServerTransport };
+    } catch (error) {
+      console.error("Failed to initialize MCP server:", error);
+      throw error;
+    }
   }
 
   private setupHandlers(ListToolsRequestSchema: any, CallToolRequestSchema: any, ErrorCode: any, McpError: any): void {
+    // Handle tools/list request
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+      console.error("Received tools/list request");
       return {
         tools: [
           {
@@ -743,7 +752,9 @@ class BackendWalletMcpServer {
       };
     });
 
+    // Handle tools/call request
     this.server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
+      console.error(`Received tools/call request for tool: ${request.params.name}`);
       const { name, arguments: args } = request.params;
 
       try {
@@ -1395,17 +1406,27 @@ class BackendWalletMcpServer {
   }
 
   async run(): Promise<void> {
-    const { StdioServerTransport } = await this.initialize();
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
-    
-    console.error("Backend Wallet MCP Server running on stdio");
+    try {
+      const { StdioServerTransport } = await this.initialize();
+      const transport = new StdioServerTransport();
+      
+      console.error("Connecting to transport...");
+      await this.server.connect(transport);
+      
+      console.error("Backend Wallet MCP Server running on stdio");
+    } catch (error) {
+      console.error("Failed to start MCP server:", error);
+      throw error;
+    }
   }
 }
 
 // Run the server
 const server = new BackendWalletMcpServer();
+console.error("Starting Backend Wallet MCP Server...");
+
 server.run().catch((error) => {
   console.error("Server error:", error);
+  console.error("Stack trace:", error.stack);
   process.exit(1);
 }); 

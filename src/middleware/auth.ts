@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { JwtService } from '../utils/jwt';
+import { OAuthService } from '../services/OAuthService';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -10,12 +11,14 @@ export interface AuthenticatedRequest extends Request {
 
 export class AuthMiddleware {
   private jwtService: JwtService;
+  private oauthService: OAuthService;
 
   constructor() {
     this.jwtService = new JwtService();
+    this.oauthService = new OAuthService();
   }
 
-  authenticate = (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+  authenticate = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const authHeader = req.headers.authorization;
 
@@ -37,9 +40,27 @@ export class AuthMiddleware {
         return;
       }
 
+      // Try JWT first, then OAuth
+      try {
       const payload = this.jwtService.verifyToken(token);
       req.user = payload;
       next();
+      } catch (jwtError) {
+        // Try OAuth token
+        const oauthToken = await this.oauthService.validateAccessToken(token);
+        if (oauthToken) {
+          req.user = {
+            userId: 1, // Demo user ID for OAuth
+            email: 'oauth@example.com'
+          };
+          next();
+        } else {
+          res.status(401).json({
+            success: false,
+            message: 'Invalid or expired token',
+          });
+        }
+      }
     } catch (error) {
       res.status(401).json({
         success: false,

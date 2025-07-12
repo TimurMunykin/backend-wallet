@@ -1,15 +1,15 @@
 import 'reflect-metadata';
 import express from 'express';
-import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 
 import { AppDataSource } from './config/database';
 import authRoutes from './routes/auth';
+import oauthRoutes from './routes/oauth';
+import mcpRoutes from './routes/mcp';
 import accountRoutes from './routes/accounts';
 import dailySpendingRoutes from './routes/daily-spending';
 import transactionRoutes from './routes/transactions';
@@ -25,13 +25,15 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100000,
-  message: {
-    success: false,
-    message: 'Too many requests from this IP, please try again later.',
-  },
+// Remove rate limiting - can interfere with Claude.ai requests
+app.use(morgan('combined'));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+// Middleware to handle ngrok browser warnings
+app.use((_req, res, next) => {
+  res.header('ngrok-skip-browser-warning', 'true');
+  next();
 });
 
 const swaggerOptions = {
@@ -103,38 +105,24 @@ const specs = swaggerJsdoc(swaggerOptions);
 
 app.use(helmet());
 
-// CORS configuration for different environments
-const corsOrigins = () => {
-  if (process.env.NODE_ENV === 'production') {
-    return [
-      'http://localhost',      // Production frontend
-      'http://localhost:80',   // Production frontend with port
-      process.env.FRONTEND_URL || 'http://localhost'
-    ];
-  } else {
-    // Development environment
-    return [
-      'http://localhost:3001', // Frontend development server
-      'http://localhost:3000', // Backend server (for swagger UI)
-      'http://127.0.0.1:3001', // Alternative localhost format
-      'http://127.0.0.1:3000', // Alternative localhost format
-      process.env.FRONTEND_URL || 'http://localhost:3001'
-    ];
-  }
-};
-
-app.use(cors({
-  origin: corsOrigins(),
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
-app.use(morgan('combined'));
-app.use(limiter);
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
-
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
+
+// Root endpoint for Claude.ai verification
+app.get('/', (_req, res) => {
+  res.json({
+    service: 'Personal Finance Assistant MCP Server',
+    version: '1.0.0',
+    status: 'active',
+    discovery: '/.well-known/mcp',
+    oauth: '/oauth/oauth-authorization-server',
+    endpoints: {
+      mcp: '/mcp',
+      tools: '/mcp/tools',
+      call: '/mcp/call',
+      streamableHttp: '/mcp/sse'
+    }
+  });
+});
 
 app.get('/health', (_req, res) => {
   res.status(200).json({
@@ -154,6 +142,14 @@ app.get('/api/ping', (_req, res) => {
   });
 });
 
+// OAuth 2.1 routes for MCP Authorization
+app.use('/oauth', oauthRoutes);
+app.use('/.well-known', oauthRoutes);
+
+// MCP Protocol routes
+app.use('/mcp', mcpRoutes);
+
+// API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/accounts', accountRoutes);
 app.use('/api/daily-spending', dailySpendingRoutes);
@@ -172,6 +168,8 @@ app.use('*', (_req, res) => {
 });
 
 app.use(errorHandler);
+
+
 
 const startServer = async (): Promise<void> => {
   try {
