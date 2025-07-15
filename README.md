@@ -1,5 +1,11 @@
 # Personal Finance Management System
 
+```
+ngrok http 300
+```
+{ngrok_adress}/mcp/sse - adress for claude web integration
+
+
 A comprehensive full-stack TypeScript application for personal finance management with advanced daily spending calculations, goal tracking, and financial analytics.
 
 ## Architecture
