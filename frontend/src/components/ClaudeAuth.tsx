@@ -36,10 +36,18 @@ interface ClaudeAuthProps {
 const ClaudeAuth: React.FC<ClaudeAuthProps> = () => {
   const { user, login } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authParams, setAuthParams] = useState<ClaudeAuthProps>({});
   const [showLogin, setShowLogin] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
+  const [registerForm, setRegisterForm] = useState({ 
+    name: '', 
+    email: '', 
+    password: '', 
+    confirmPassword: '' 
+  });
 
   useEffect(() => {
     // Extract OAuth parameters from URL
@@ -99,6 +107,53 @@ const ClaudeAuth: React.FC<ClaudeAuthProps> = () => {
     }
   };
 
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    // Validate passwords match
+    if (registerForm.password !== registerForm.confirmPassword) {
+      setError('Passwords do not match');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // Make API call to register user
+      const apiUrl = import.meta.env.VITE_API_URL;
+      const response = await fetch(`${apiUrl}/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: registerForm.name,
+          email: registerForm.email,
+          password: registerForm.password,
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          // Call AuthContext login with user data and token
+          login(result.data.user, result.data.tokens.accessToken);
+          setShowLogin(false);
+        } else {
+          setError(result.message || 'Registration failed');
+        }
+      } else {
+        const errorData = await response.json();
+        setError(errorData.message || 'Registration failed');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Registration failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleApprove = async () => {
     setLoading(true);
     setError(null);
@@ -129,12 +184,22 @@ const ClaudeAuth: React.FC<ClaudeAuthProps> = () => {
         
         // Redirect back to Claude with authorization code
         if (authParams.redirectUri && result.code) {
+          // Set redirecting state and keep interface disabled
+          setLoading(false);
+          setRedirecting(true);
+          
           const redirectUrl = new URL(authParams.redirectUri);
           redirectUrl.searchParams.set('code', result.code);
           if (authParams.state) {
             redirectUrl.searchParams.set('state', authParams.state);
           }
-          window.location.href = redirectUrl.toString();
+          
+          // Small delay to ensure UI updates before redirect
+          setTimeout(() => {
+            window.location.href = redirectUrl.toString();
+          }, 100);
+          
+          return; // Don't execute finally block
         }
       } else {
         const errorData = await response.json();
@@ -148,6 +213,8 @@ const ClaudeAuth: React.FC<ClaudeAuthProps> = () => {
   };
 
   const handleDeny = () => {
+    setRedirecting(true);
+    
     // Redirect back to Claude with error
     if (authParams.redirectUri) {
       const redirectUrl = new URL(authParams.redirectUri);
@@ -156,13 +223,17 @@ const ClaudeAuth: React.FC<ClaudeAuthProps> = () => {
       if (authParams.state) {
         redirectUrl.searchParams.set('state', authParams.state);
       }
-      window.location.href = redirectUrl.toString();
+      
+      // Small delay to ensure UI updates before redirect
+      setTimeout(() => {
+        window.location.href = redirectUrl.toString();
+      }, 100);
     }
   };
 
   if (showLogin) {
     return (
-      <Card sx={{ maxWidth: 400, width: '100%', mx: 'auto' }}>
+      <Card sx={{ maxWidth: 450, width: '100%', mx: 'auto' }}>
         <CardContent sx={{ p: 4 }}>
           <Box sx={{ textAlign: 'center', mb: 4 }}>
             <Avatar sx={{ bgcolor: 'primary.main', mx: 'auto', mb: 2 }}>
@@ -172,7 +243,10 @@ const ClaudeAuth: React.FC<ClaudeAuthProps> = () => {
               Claude Integration
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Please log in to authorize Claude access to your wallet
+              {isRegistering 
+                ? 'Create an account to authorize Claude access to your wallet'
+                : 'Please log in to authorize Claude access to your wallet'
+              }
             </Typography>
           </Box>
 
@@ -182,15 +256,33 @@ const ClaudeAuth: React.FC<ClaudeAuthProps> = () => {
             </Alert>
           )}
 
-          <Box component="form" onSubmit={handleLogin} sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <Box component="form" onSubmit={isRegistering ? handleRegister : handleLogin} sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {isRegistering && (
+              <TextField
+                label="Full Name"
+                type="text"
+                required
+                fullWidth
+                value={registerForm.name}
+                onChange={(e) => setRegisterForm(prev => ({ ...prev, name: e.target.value }))}
+                disabled={loading || redirecting}
+              />
+            )}
+
             <TextField
               label="Email"
               type="email"
               required
               fullWidth
-              value={loginForm.email}
-              onChange={(e) => setLoginForm(prev => ({ ...prev, email: e.target.value }))}
-              disabled={loading}
+              value={isRegistering ? registerForm.email : loginForm.email}
+              onChange={(e) => {
+                if (isRegistering) {
+                  setRegisterForm(prev => ({ ...prev, email: e.target.value }));
+                } else {
+                  setLoginForm(prev => ({ ...prev, email: e.target.value }));
+                }
+              }}
+              disabled={loading || redirecting}
             />
 
             <TextField
@@ -198,27 +290,62 @@ const ClaudeAuth: React.FC<ClaudeAuthProps> = () => {
               type="password"
               required
               fullWidth
-              value={loginForm.password}
-              onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
-              disabled={loading}
+              value={isRegistering ? registerForm.password : loginForm.password}
+              onChange={(e) => {
+                if (isRegistering) {
+                  setRegisterForm(prev => ({ ...prev, password: e.target.value }));
+                } else {
+                  setLoginForm(prev => ({ ...prev, password: e.target.value }));
+                }
+              }}
+              disabled={loading || redirecting}
             />
+
+            {isRegistering && (
+              <TextField
+                label="Confirm Password"
+                type="password"
+                required
+                fullWidth
+                value={registerForm.confirmPassword}
+                onChange={(e) => setRegisterForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                disabled={loading || redirecting}
+              />
+            )}
 
             <Button
               type="submit"
               variant="contained"
               fullWidth
               size="large"
-              disabled={loading}
+              disabled={loading || redirecting}
               sx={{ mt: 2 }}
             >
               {loading ? (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <CircularProgress size={20} color="inherit" />
-                  Logging in...
+                  {isRegistering ? 'Creating Account...' : 'Logging in...'}
                 </Box>
               ) : (
-                'Login'
+                isRegistering ? 'Create Account & Continue' : 'Login & Continue'
               )}
+            </Button>
+
+            <Divider sx={{ my: 2 }} />
+
+            <Button
+              variant="text"
+              fullWidth
+              onClick={() => {
+                setIsRegistering(!isRegistering);
+                setError(null);
+              }}
+              disabled={loading || redirecting}
+            >
+              {isRegistering 
+                ? 'Already have an account? Sign in' 
+                : "Don't have an account? Sign up"
+              }
             </Button>
           </Box>
         </CardContent>
@@ -301,22 +428,34 @@ const ClaudeAuth: React.FC<ClaudeAuthProps> = () => {
             fullWidth
             size="large"
             onClick={handleDeny}
-            disabled={loading}
+            disabled={loading || redirecting}
             color="inherit"
           >
-            Deny
+            {redirecting ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <CircularProgress size={20} color="inherit" />
+                Redirecting...
+              </Box>
+            ) : (
+              'Deny'
+            )}
           </Button>
           <Button
             variant="contained"
             fullWidth
             size="large"
             onClick={handleApprove}
-            disabled={loading}
+            disabled={loading || redirecting}
           >
             {loading ? (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <CircularProgress size={20} color="inherit" />
                 Authorizing...
+              </Box>
+            ) : redirecting ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <CircularProgress size={20} color="inherit" />
+                Redirecting to Claude...
               </Box>
             ) : (
               'Authorize Claude'
