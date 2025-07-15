@@ -8,6 +8,25 @@ const mcpController = new McpController();
 router.get('/tools', mcpController.listTools);
 router.post('/call', mcpController.callTool);
 
+// Add request timeout middleware for MCP endpoint
+router.use('/sse', (req, res, next) => {
+  // Set timeout for each request
+  req.setTimeout(60000, () => {
+    console.error('⏰ MCP request timeout');
+    if (!res.headersSent) {
+      res.status(408).json({
+        jsonrpc: '2.0',
+        error: {
+          code: -32000,
+          message: 'Request timeout'
+        },
+        id: null
+      });
+    }
+  });
+  next();
+});
+
 // Modern StreamableHTTP endpoint for MCP - правильная реализация
 router.all('/sse', async (req, res): Promise<void> => {
   console.log('📡 MCP connection attempt from:', req.get('User-Agent'));
@@ -24,18 +43,35 @@ router.all('/sse', async (req, res): Promise<void> => {
         'Connection': 'keep-alive',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Accept, Authorization, Content-Type',
+        'X-Accel-Buffering': 'no', // Disable nginx buffering
       });
       
-      // Keep the connection alive
+      // Send initial connection message
+      res.write('data: {"type":"connection","status":"connected"}\n\n');
+      
+      // Keep the connection alive with more frequent heartbeats
       const keepAlive = setInterval(() => {
-        res.write('data: {}\n\n');
-      }, 30000);
+        if (!res.destroyed) {
+          res.write('data: {"type":"heartbeat","timestamp":"' + new Date().toISOString() + '"}\n\n');
+        }
+      }, 15000); // Every 15 seconds instead of 30
       
-      req.on('close', () => {
+      // Handle connection cleanup
+      const cleanup = () => {
         clearInterval(keepAlive);
-      });
+        if (!res.destroyed) {
+          res.end();
+        }
+      };
       
-      console.log('✅ SSE stream established for GET request');
+      req.on('close', cleanup);
+      req.on('error', cleanup);
+      res.on('error', cleanup);
+      
+      // Set a longer timeout
+      req.setTimeout(300000); // 5 minutes
+      
+      console.log('✅ SSE stream established for GET request with enhanced keep-alive');
       return;
     }
     
@@ -43,17 +79,28 @@ router.all('/sse', async (req, res): Promise<void> => {
       // POST request - handle JSON-RPC message
       const jsonRpcMessage = req.body;
       
-      if (!jsonRpcMessage || typeof jsonRpcMessage !== 'object') {
+      // More robust validation
+      if (!jsonRpcMessage || typeof jsonRpcMessage !== 'object' || !jsonRpcMessage.jsonrpc || !jsonRpcMessage.method) {
+        console.error('❌ Invalid JSON-RPC message:', jsonRpcMessage);
         res.status(400).json({
           jsonrpc: '2.0',
           error: {
             code: -32700,
-            message: 'Parse error'
+            message: 'Parse error - Invalid JSON-RPC format'
           },
-          id: null
+          id: jsonRpcMessage?.id || null
         });
         return;
       }
+      
+      console.log(`📨 Processing JSON-RPC method: ${jsonRpcMessage.method} with ID: ${jsonRpcMessage.id}`);
+      
+      // Set response headers to prevent connection issues
+      res.set({
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*'
+      });
       
       // Handle initialize request
       if (jsonRpcMessage.method === 'initialize') {
