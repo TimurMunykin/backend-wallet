@@ -62,6 +62,7 @@ export interface TokenResponse {
 }
 
 export class OAuthService {
+  private static instance: OAuthService;
   private jwtService: JwtService;
   
   // In-memory storage for demo purposes
@@ -71,9 +72,17 @@ export class OAuthService {
   private accessTokens: Map<string, AccessToken> = new Map();
   private refreshTokens: Map<string, RefreshToken> = new Map();
 
-  constructor() {
+  private constructor() {
+    console.log('🔧 Creating new OAuthService instance');
     this.jwtService = new JwtService();
     this.initializeDefaultClient();
+  }
+
+  public static getInstance(): OAuthService {
+    if (!OAuthService.instance) {
+      OAuthService.instance = new OAuthService();
+    }
+    return OAuthService.instance;
   }
 
   private initializeDefaultClient(): void {
@@ -295,9 +304,18 @@ export class OAuthService {
     scope: string;
     expires_at: Date;
   } | null> {
+    console.log('🔍 validateAccessToken called with token:', token.substring(0, 20) + '...');
+    console.log('🔍 Current stored tokens:', Array.from(this.accessTokens.keys()).map(k => k.substring(0, 20) + '...'));
+    
     try {
       // Try to decode as JWT first
+      console.log('🔍 Trying JWT verification...');
       const payload = this.jwtService.verifyToken(token) as any;
+      console.log('✅ JWT verification successful:', {
+        client_id: payload.client_id,
+        user_id: payload.userId,
+        scope: payload.scope
+      });
       return {
         client_id: payload.client_id || 'jwt-client',
         user_id: payload.userId,
@@ -305,12 +323,32 @@ export class OAuthService {
         expires_at: new Date(payload.exp * 1000)
       };
     } catch (error) {
-      // If not JWT, check in-memory tokens
-      const accessToken = this.accessTokens.get(token);
+      console.log('❌ JWT verification failed:', error instanceof Error ? error.message : 'Unknown error');
       
-      if (!accessToken || accessToken.expires_at < new Date()) {
+      // If not JWT, check in-memory tokens
+      console.log('🔍 Checking in-memory tokens...');
+      const accessToken = this.accessTokens.get(token);
+      console.log('🔍 Found token in map:', !!accessToken);
+      
+      if (!accessToken) {
+        console.log('❌ Token not found in accessTokens Map');
         return null;
       }
+      
+      if (accessToken.expires_at < new Date()) {
+        console.log('❌ Token expired:', {
+          expires_at: accessToken.expires_at,
+          now: new Date()
+        });
+        return null;
+      }
+
+      console.log('✅ Token validation successful:', {
+        client_id: accessToken.client_id,
+        user_id: accessToken.user_id,
+        scope: accessToken.scope,
+        expires_at: accessToken.expires_at
+      });
 
       return {
         client_id: accessToken.client_id,
@@ -338,8 +376,15 @@ export class OAuthService {
     user_id?: number;
     scope: string;
   }): Promise<TokenResponse> {
+    console.log('🔍 generateTokens called with params:', params);
+    
     const accessTokenValue = crypto.randomBytes(32).toString('hex');
     const refreshTokenValue = crypto.randomBytes(32).toString('hex');
+    
+    console.log('🔍 Generated tokens:', {
+      accessToken: accessTokenValue.substring(0, 20) + '...',
+      refreshToken: refreshTokenValue.substring(0, 20) + '...'
+    });
     
     const accessTokenExpiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
     const refreshTokenExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
@@ -355,7 +400,9 @@ export class OAuthService {
       created_at: new Date()
     };
 
+    console.log('🔍 Storing access token in Map...');
     this.accessTokens.set(accessTokenValue, accessToken);
+    console.log('🔍 Access token stored. Total tokens now:', this.accessTokens.size);
 
     // Store refresh token
     const refreshToken: RefreshToken = {

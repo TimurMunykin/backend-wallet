@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import { OAuthController } from '../controllers/OAuthController';
+import { AuthMiddleware } from '../middleware/auth';
 
 const router = Router();
 const oauthController = new OAuthController();
+const authMiddleware = new AuthMiddleware();
 
 // Authorization Server Metadata endpoint (RFC 8414)
 router.get('/oauth-authorization-server', oauthController.getAuthorizationServerMetadata);
@@ -58,6 +60,7 @@ router.get('/mcp', async (req, res) => {
 
 // OAuth 2.1 endpoints
 router.get('/authorize', oauthController.authorize);
+router.post('/authorize', authMiddleware.authenticate, oauthController.handleConsent);
 router.post('/token', oauthController.token);
 router.post('/register', oauthController.register);
 

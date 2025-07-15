@@ -10,7 +10,7 @@ export class OAuthController {
   private oauthService: OAuthService;
 
   constructor() {
-    this.oauthService = new OAuthService();
+    this.oauthService = OAuthService.getInstance();
   }
 
   /**
@@ -103,26 +103,75 @@ export class OAuthController {
         return this.redirectWithError(res, redirect_uri as string, 'invalid_client', state as string);
       }
 
-      // For now, auto-approve (in real implementation, show consent page)
-      const authCode = await this.oauthService.generateAuthorizationCode({
-        client_id: client_id as string,
-        redirect_uri: redirect_uri as string,
-        scope: scope as string || 'mcp:tools:list mcp:tools:call',
-        code_challenge: code_challenge as string,
-        code_challenge_method: code_challenge_method as string,
-        user_id: (req as AuthenticatedRequest).user?.userId || 1 // For demo purposes
-      });
-
-      const redirectUrl = new URL(redirect_uri as string);
-      redirectUrl.searchParams.set('code', authCode);
+      // Redirect to consent page instead of auto-approving
+      const consentUrl = new URL('/claude/authorize', req.get('origin') || `${req.protocol}://${req.get('host')}`);
+      
+      // Pass all OAuth parameters to the consent page
+      consentUrl.searchParams.set('client_id', client_id as string);
+      consentUrl.searchParams.set('redirect_uri', redirect_uri as string);
+      consentUrl.searchParams.set('scope', scope as string || 'mcp:tools:list mcp:tools:call');
       if (state) {
-        redirectUrl.searchParams.set('state', state as string);
+        consentUrl.searchParams.set('state', state as string);
       }
+      consentUrl.searchParams.set('code_challenge', code_challenge as string);
+      consentUrl.searchParams.set('code_challenge_method', code_challenge_method as string);
 
-      res.redirect(redirectUrl.toString());
+      res.redirect(consentUrl.toString());
     } catch (error) {
       console.error('Authorization error:', error);
       this.redirectWithError(res, req.query.redirect_uri as string, 'server_error', req.query.state as string);
+    }
+  };
+
+  /**
+   * Handle user consent POST request
+   * This endpoint is called when user approves/denies Claude access
+   */
+  handleConsent = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const {
+        client_id,
+        redirect_uri,
+        scope,
+        state,
+        code_challenge,
+        code_challenge_method,
+        approved
+      } = req.body;
+
+      if (!approved) {
+        // User denied access - redirect with error
+        const redirectUrl = new URL(redirect_uri);
+        redirectUrl.searchParams.set('error', 'access_denied');
+        redirectUrl.searchParams.set('error_description', 'User denied the request');
+        if (state) {
+          redirectUrl.searchParams.set('state', state);
+        }
+        res.json({ redirect_url: redirectUrl.toString() });
+        return;
+      }
+
+      // User approved - generate authorization code
+      const authCode = await this.oauthService.generateAuthorizationCode({
+        client_id,
+        redirect_uri,
+        scope: scope || 'mcp:tools:list mcp:tools:call',
+        code_challenge,
+        code_challenge_method,
+        user_id: (req as AuthenticatedRequest).user!.userId // User is guaranteed to exist due to auth middleware
+      });
+
+      // Return success with authorization code
+      res.json({ 
+        code: authCode,
+        redirect_uri 
+      });
+    } catch (error) {
+      console.error('Consent handling error:', error);
+      res.status(500).json({
+        error: 'server_error',
+        error_description: 'Unable to process consent'
+      });
     }
   };
 

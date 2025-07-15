@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import express from 'express';
+import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
@@ -105,7 +106,30 @@ const specs = swaggerJsdoc(swaggerOptions);
 
 app.use(helmet());
 
+// CORS configuration for frontend access
+app.use(cors({
+  origin: [
+    'http://localhost:3001', // Local frontend development
+    'https://claude.ai', // Claude.ai domain
+    /https:\/\/.*\.ngrok-free\.app$/, // Any ngrok domain
+    /https:\/\/.*\.ngrok\.io$/, // Legacy ngrok domains
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'ngrok-skip-browser-warning'],
+}));
+
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
+
+// Claude authorization redirect - redirect to frontend
+app.get('/claude/authorize', (req, res) => {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+  const queryString = new URLSearchParams(req.query as Record<string, string>).toString();
+  const redirectUrl = `${frontendUrl}/claude/authorize?${queryString}`;
+  
+  console.log('🔀 Redirecting Claude authorization to frontend:', redirectUrl);
+  res.redirect(redirectUrl);
+});
 
 // Root endpoint for Claude.ai verification
 app.get('/', (_req, res) => {

@@ -14,7 +14,7 @@ export class OAuthMiddleware {
   private oauthService: OAuthService;
 
   constructor() {
-    this.oauthService = new OAuthService();
+    this.oauthService = OAuthService.getInstance();
   }
 
   /**

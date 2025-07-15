@@ -42,6 +42,7 @@ import Goals from './components/Goals'
 import AnalyticsPage from './components/AnalyticsPage'
 import Snapshots from './components/Snapshots'
 import DailySpending from './components/DailySpending'
+import ClaudeAuth from './components/ClaudeAuth'
 import { AuthProvider, useAuth } from './context/AuthContext'
 
 const theme = createTheme({
@@ -154,7 +155,7 @@ function AppContent() {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Person />
             <Typography variant="body2" sx={{ mr: 2 }}>
-              {user.name}
+              {user?.name || user?.email || 'User'}
             </Typography>
             <IconButton color="inherit" onClick={handleLogout}>
               <Logout />
@@ -222,11 +223,11 @@ function AppContent() {
         autoHideDuration={6000}
         onClose={handleCloseNotification}
       >
-        {notification && (
+        {notification ? (
           <Alert onClose={handleCloseNotification} severity={notification.severity}>
             {notification.message}
           </Alert>
-        )}
+        ) : undefined}
       </Snackbar>
     </Box>
   )
@@ -238,11 +239,33 @@ function App() {
       <CssBaseline />
       <Router>
         <AuthProvider>
-          <AppContent />
+          <AppRouter />
         </AuthProvider>
       </Router>
     </ThemeProvider>
   )
+}
+
+function AppRouter() {
+  const location = useLocation()
+  
+  // Handle Claude authorization flow with proper Material-UI styling
+  if (location.pathname === '/claude/authorize') {
+    return (
+      <Box sx={{ 
+        minHeight: '100vh',
+        backgroundColor: 'background.default',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <ClaudeAuth />
+      </Box>
+    )
+  }
+  
+  // Default app content
+  return <AppContent />
 }
 
 export default App

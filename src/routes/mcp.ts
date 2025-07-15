@@ -1,8 +1,75 @@
 import { Router } from 'express';
 import { McpController } from '../controllers/McpController';
+import { AuthenticatedRequest } from '../middleware/auth';
+import { OAuthService } from '../services/OAuthService';
+import { AuthService } from '../services/AuthService';
 
 const router = Router();
 const mcpController = new McpController();
+const oauthService = OAuthService.getInstance();
+const authService = new AuthService();
+
+// Helper function to authenticate MCP requests
+async function authenticateRequest(req: AuthenticatedRequest): Promise<{ userId: number; email: string } | null> {
+  try {
+    const authHeader = req.headers.authorization;
+    console.log('🔍 Auth header:', authHeader);
+    if (!authHeader) {
+      console.log('❌ No auth header found');
+      return null;
+    }
+
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+      console.log('❌ No token found in auth header');
+      return null;
+    }
+
+    console.log('🔍 Extracted token:', token.substring(0, 20) + '...');
+
+    // Try OAuth token first
+    const oauthToken = await oauthService.validateAccessToken(token);
+    console.log('🔍 OAuth token validation result:', {
+      isValid: !!oauthToken,
+      client_id: oauthToken?.client_id,
+      user_id: oauthToken?.user_id,
+      scope: oauthToken?.scope,
+      expires_at: oauthToken?.expires_at
+    });
+
+    if (oauthToken && oauthToken.user_id) {
+      console.log('🔍 Fetching user by ID:', oauthToken.user_id);
+      // Fetch real user data
+      const user = await authService.getUserById(oauthToken.user_id);
+      console.log('🔍 User lookup result:', {
+        found: !!user,
+        userId: user?.id,
+        email: user?.email
+      });
+      
+      if (user) {
+        console.log('✅ Authentication successful for user:', user.id, user.email);
+        return {
+          userId: user.id,
+          email: user.email
+        };
+      } else {
+        console.log('❌ User not found in database for user_id:', oauthToken.user_id);
+      }
+    } else {
+      if (!oauthToken) {
+        console.log('❌ OAuth token validation failed');
+      } else {
+        console.log('❌ OAuth token has no user_id:', oauthToken);
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error('❌ Authentication error:', error);
+    return null;
+  }
+}
 
 // MCP Protocol endpoints
 router.get('/tools', mcpController.listTools);
@@ -28,11 +95,29 @@ router.use('/sse', (req, res, next) => {
 });
 
 // Modern StreamableHTTP endpoint for MCP - правильная реализация
-router.all('/sse', async (req, res): Promise<void> => {
+router.all('/sse', async (req: AuthenticatedRequest, res): Promise<void> => {
   console.log('📡 MCP connection attempt from:', req.get('User-Agent'));
   console.log('📡 Method:', req.method);
   console.log('📡 Headers:', JSON.stringify(req.headers, null, 2));
   console.log('📡 Body:', JSON.stringify(req.body, null, 2));
+  
+  // Authenticate the request first
+  const user = await authenticateRequest(req);
+  if (!user) {
+    console.log('❌ Unauthorized MCP connection attempt');
+    res.status(401).json({
+      jsonrpc: '2.0',
+      error: {
+        code: -32000,
+        message: 'Authentication required'
+      },
+      id: null
+    });
+    return;
+  }
+
+  console.log(`✅ Authenticated MCP connection for user: ${user.userId} (${user.email})`);
+  req.user = user; // Attach user to request
   
   try {
     if (req.method === 'GET') {

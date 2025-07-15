@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { JwtService } from '../utils/jwt';
 import { OAuthService } from '../services/OAuthService';
+import { AuthService } from '../services/AuthService';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -12,10 +13,12 @@ export interface AuthenticatedRequest extends Request {
 export class AuthMiddleware {
   private jwtService: JwtService;
   private oauthService: OAuthService;
+  private authService: AuthService;
 
   constructor() {
     this.jwtService = new JwtService();
-    this.oauthService = new OAuthService();
+    this.oauthService = OAuthService.getInstance();
+    this.authService = new AuthService();
   }
 
   authenticate = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
@@ -42,18 +45,27 @@ export class AuthMiddleware {
 
       // Try JWT first, then OAuth
       try {
-      const payload = this.jwtService.verifyToken(token);
-      req.user = payload;
-      next();
+        const payload = this.jwtService.verifyToken(token);
+        req.user = payload;
+        next();
       } catch (jwtError) {
         // Try OAuth token
         const oauthToken = await this.oauthService.validateAccessToken(token);
-        if (oauthToken) {
-          req.user = {
-            userId: 1, // Demo user ID for OAuth
-            email: 'oauth@example.com'
-          };
-          next();
+        if (oauthToken && oauthToken.user_id) {
+          // Fetch real user data
+          const user = await this.authService.getUserById(oauthToken.user_id);
+          if (user) {
+            req.user = {
+              userId: user.id,
+              email: user.email
+            };
+            next();
+          } else {
+            res.status(401).json({
+              success: false,
+              message: 'User not found',
+            });
+          }
         } else {
           res.status(401).json({
             success: false,

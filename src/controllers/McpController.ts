@@ -25,7 +25,7 @@ export class McpController {
   private analyticsService: AnalyticsService;
 
   constructor() {
-    this.oauthService = new OAuthService();
+    this.oauthService = OAuthService.getInstance();
     this.transactionService = new TransactionService();
     this.accountService = new AccountService();
     this.analyticsService = new AnalyticsService();
