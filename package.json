@@ -17,6 +17,7 @@
     "db:migrate": "typeorm migration:run",
     "db:migrate:revert": "typeorm migration:revert",
     "db:migrate:generate": "typeorm migration:generate",
+    "db:migrate:create": "typeorm migration:create src/migrations/InitialSchema",
     "db:seed": "ts-node src/seeds/index.ts",
     "docker:build": "docker build -t backend-wallet .",
     "docker:up": "docker compose up -d",
