@@ -19,7 +19,7 @@ export const AppDataSource = new DataSource({
   username: process.env['DB_USERNAME'] || 'postgres',
   password: process.env['DB_PASSWORD'] || 'password',
   database: process.env['DB_NAME'] || 'finance_db',
-  synchronize: process.env['NODE_ENV'] === 'development',
+  synchronize: true, // Временно включено для продакшн
   logging: process.env['NODE_ENV'] === 'development',
   entities: [
     User,
