@@ -23,7 +23,12 @@
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "docker:dev": "docker compose -f docker-compose.dev.yml up --build",
-    "docker:dev:down": "docker compose -f docker-compose.dev.yml down"
+    "docker:dev:down": "docker compose -f docker-compose.dev.yml down",
+    "docker:prod": "docker compose up -d",
+    "ssl:init": "./init-letsencrypt.sh",
+    "ssl:renew": "docker compose exec certbot certbot renew",
+    "ssl:test": "docker compose exec certbot certbot renew --dry-run",
+    "ssl:logs": "docker compose logs nginx certbot"
   },
   "keywords": [
     "finance",
