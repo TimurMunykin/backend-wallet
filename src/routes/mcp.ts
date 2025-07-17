@@ -417,7 +417,7 @@ router.all('/sse', async (req: AuthenticatedRequest, res): Promise<void> => {
               
             case 'addTransaction':
               try {
-                const transaction = await transactionService.createTransaction(user.userId, {
+                await transactionService.createTransaction(user.userId, {
                   accountId: args.accountId,
                   amount: args.amount,
                   type: args.type,
