@@ -12,9 +12,9 @@ router.get('/oauth-authorization-server', oauthController.getAuthorizationServer
 // MCP Discovery endpoint
 router.get('/mcp', async (req, res) => {
   try {
-    // Force https for ngrok URLs
+    // Force https for production domains
     const host = req.get('host');
-    const baseUrl = host?.includes('ngrok') ? `https://${host}` : `${req.protocol}://${host}`;
+    const baseUrl = `https://${host}`;
     
     // Add ngrok bypass header
     res.header('ngrok-skip-browser-warning', 'true');

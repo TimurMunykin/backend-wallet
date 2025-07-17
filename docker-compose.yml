@@ -33,7 +33,7 @@ services:
     build: ./frontend
     container_name: backend-wallet-frontend
     volumes:
-      - frontend_build:/app/dist
+      - frontend_build:/usr/share/nginx/html
     restart: unless-stopped
 
   app:

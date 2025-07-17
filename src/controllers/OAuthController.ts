@@ -19,9 +19,9 @@ export class OAuthController {
    */
   getAuthorizationServerMetadata = async (req: Request, res: Response): Promise<void> => {
     try {
-      // Force https for ngrok URLs
+      // Force https for production domains
       const host = req.get('host');
-      const baseUrl = host?.includes('ngrok') ? `https://${host}` : `${req.protocol}://${host}`;
+      const baseUrl = `https://${host}`;
       
       const metadata = {
         issuer: baseUrl,

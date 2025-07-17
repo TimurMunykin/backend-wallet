@@ -104,6 +104,9 @@ const swaggerOptions = {
 
 const specs = swaggerJsdoc(swaggerOptions);
 
+// Trust proxy headers (nginx sets X-Forwarded-Proto)
+app.set('trust proxy', true);
+
 app.use(helmet());
 
 // CORS configuration for frontend access
@@ -118,6 +121,43 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'ngrok-skip-browser-warning'],
 }));
+
+// OAuth 2.1 well-known endpoint (RFC 8414)
+app.get('/.well-known/oauth-authorization-server', async (req, res) => {
+  // Force https for production domains
+  const host = req.get('host');
+  const baseUrl = `https://${host}`;
+  
+  const metadata = {
+    issuer: baseUrl,
+    authorization_endpoint: `${baseUrl}/oauth/authorize`,
+    token_endpoint: `${baseUrl}/oauth/token`,
+    registration_endpoint: `${baseUrl}/oauth/register`,
+    jwks_uri: `${baseUrl}/oauth/jwks`,
+    scopes_supported: [
+      'mcp:tools:list',
+      'mcp:tools:call',
+      'mcp:resources:read',
+      'mcp:resources:write',
+      'wallet:accounts:read',
+      'wallet:accounts:write',
+      'wallet:transactions:read',
+      'wallet:transactions:write',
+      'wallet:analytics:read'
+    ],
+    response_types_supported: ['code'],
+    grant_types_supported: ['authorization_code', 'refresh_token', 'client_credentials'],
+    token_endpoint_auth_methods_supported: ['client_secret_basic', 'none'],
+    code_challenge_methods_supported: ['S256'],
+    subject_types_supported: ['public'],
+    id_token_signing_alg_values_supported: ['RS256'],
+    userinfo_endpoint: `${baseUrl}/oauth/userinfo`,
+    revocation_endpoint: `${baseUrl}/oauth/revoke`,
+    introspection_endpoint: `${baseUrl}/oauth/introspect`
+  };
+
+  res.json(metadata);
+});
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
 
