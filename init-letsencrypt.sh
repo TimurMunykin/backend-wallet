@@ -150,7 +150,7 @@ start_nginx_temp() {
     fi
     
     # Start nginx
-    docker-compose up -d nginx
+    docker compose up -d nginx
     
     # Wait for nginx to start
     sleep 5
@@ -172,7 +172,7 @@ request_ssl_certificate() {
     fi
     
     # Request the certificate
-    docker-compose run --rm certbot \
+    docker compose run --rm certbot \
         certonly \
         --webroot \
         --webroot-path=/var/www/certbot \
@@ -204,7 +204,7 @@ restore_nginx_config() {
     fi
     
     # Reload nginx
-    docker-compose exec nginx nginx -s reload
+    docker compose exec nginx nginx -s reload
     
     print_success "Final nginx configuration restored"
 }

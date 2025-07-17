@@ -29,11 +29,17 @@ print_success() {
     echo -e "${GREEN}[SUCCESS]${NC} $1"
 }
 
-# Check if docker-compose is available
+# Check if docker compose is available
 check_docker_compose() {
-    if ! command -v docker-compose &> /dev/null; then
-        print_error "docker-compose could not be found"
-        print_error "Please install docker-compose or use 'docker compose' instead"
+    if ! command -v docker &> /dev/null; then
+        print_error "docker could not be found"
+        print_error "Please install docker"
+        exit 1
+    fi
+    
+    if ! docker compose version &> /dev/null; then
+        print_error "docker compose could not be found"
+        print_error "Please make sure docker compose is available"
         exit 1
     fi
 }
@@ -42,15 +48,15 @@ check_docker_compose() {
 check_containers() {
     print_status "Checking if containers are running..."
     
-    if ! docker-compose ps | grep -q "backend-wallet-nginx.*Up"; then
+    if ! docker compose ps | grep -q "backend-wallet-nginx.*Up"; then
         print_error "Nginx container is not running"
-        print_error "Please start the containers first: docker-compose up -d"
+        print_error "Please start the containers first: docker compose up -d"
         exit 1
     fi
     
-    if ! docker-compose ps | grep -q "backend-wallet-certbot.*Up"; then
+    if ! docker compose ps | grep -q "backend-wallet-certbot.*Up"; then
         print_error "Certbot container is not running" 
-        print_error "Please start the containers first: docker-compose up -d"
+        print_error "Please start the containers first: docker compose up -d"
         exit 1
     fi
     
@@ -61,7 +67,7 @@ check_containers() {
 test_renewal() {
     print_status "Testing certificate renewal (dry run)..."
     
-    docker-compose exec certbot certbot renew --dry-run
+    docker compose exec certbot certbot renew --dry-run
     
     if [ $? -eq 0 ]; then
         print_success "Dry run completed successfully"
@@ -75,7 +81,7 @@ test_renewal() {
 renew_certificates() {
     print_status "Renewing SSL certificates..."
     
-    docker-compose exec certbot certbot renew
+    docker compose exec certbot certbot renew
     
     if [ $? -eq 0 ]; then
         print_success "Certificates renewed successfully"
@@ -89,13 +95,13 @@ renew_certificates() {
 reload_nginx() {
     print_status "Reloading nginx configuration..."
     
-    docker-compose exec nginx nginx -s reload
+    docker compose exec nginx nginx -s reload
     
     if [ $? -eq 0 ]; then
         print_success "Nginx reloaded successfully"
     else
         print_warning "Nginx reload failed, but certificates may still be renewed"
-        print_status "Try restarting nginx: docker-compose restart nginx"
+        print_status "Try restarting nginx: docker compose restart nginx"
     fi
 }
 
@@ -103,7 +109,7 @@ reload_nginx() {
 check_expiry() {
     print_status "Checking certificate expiry dates..."
     
-    docker-compose exec certbot certbot certificates
+    docker compose exec certbot certbot certificates
 }
 
 # Display certificate status
@@ -113,12 +119,12 @@ show_status() {
     
     # Show nginx status
     print_status "Nginx status:"
-    docker-compose ps nginx
+    docker compose ps nginx
     echo
     
     # Show certbot status  
     print_status "Certbot status:"
-    docker-compose ps certbot
+    docker compose ps certbot
     echo
     
     # Show certificate info
@@ -131,11 +137,11 @@ show_logs() {
     echo
     
     print_status "Nginx logs (last 20 lines):"
-    docker-compose logs --tail=20 nginx
+    docker compose logs --tail=20 nginx
     echo
     
     print_status "Certbot logs (last 20 lines):"
-    docker-compose logs --tail=20 certbot
+    docker compose logs --tail=20 certbot
 }
 
 # Help function
