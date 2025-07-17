@@ -6,8 +6,8 @@
 set -e
 
 # Configuration
-DOMAIN="your-domain.com"
-EMAIL="your-email@example.com"  # Change this to your email
+DOMAIN="simplewallet.twc1.net"
+EMAIL="timur.munykiev@gmail.com"  # Change this to your email
 STAGING=1  # Set to 1 for testing, 0 for production
 
 # Color codes for output
