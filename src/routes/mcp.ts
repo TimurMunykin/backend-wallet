@@ -3,11 +3,15 @@ import { McpController } from '../controllers/McpController';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { OAuthService } from '../services/OAuthService';
 import { AuthService } from '../services/AuthService';
+import { AccountService } from '../services/AccountService';
+import { TransactionService } from '../services/TransactionService';
 
 const router = Router();
 const mcpController = new McpController();
 const oauthService = OAuthService.getInstance();
 const authService = new AuthService();
+const accountService = new AccountService();
+const transactionService = new TransactionService();
 
 // Helper function to authenticate MCP requests
 async function authenticateRequest(req: AuthenticatedRequest): Promise<{ userId: number; email: string } | null> {
@@ -412,95 +416,212 @@ router.all('/sse', async (req: AuthenticatedRequest, res): Promise<void> => {
               break;
               
             case 'addTransaction':
-              toolResponse = {
-                jsonrpc: '2.0',
-                result: {
-                  content: [
-                    {
-                      type: 'text',
-                      text: `💰 Transaction added: ${args.amount} ${args.type} for account ${args.accountId} - ${args.description}`
-                    }
-                  ]
-                },
-                id: jsonRpcMessage.id
-              };
+              try {
+                const transaction = await transactionService.createTransaction(user.userId, {
+                  accountId: args.accountId,
+                  amount: args.amount,
+                  type: args.type,
+                  description: args.description,
+                  transactionDate: new Date()
+                });
+                
+                const account = await accountService.getAccountById(args.accountId, user.userId);
+                
+                toolResponse = {
+                  jsonrpc: '2.0',
+                  result: {
+                    content: [
+                      {
+                        type: 'text',
+                        text: `💰 Transaction added successfully!\n- Amount: ${args.type === 'expense' ? '-' : '+'}$${args.amount.toFixed(2)}\n- Description: ${args.description}\n- Account: ${account?.name || 'Unknown Account'}\n- Date: ${new Date().toLocaleDateString()}`
+                      }
+                    ]
+                  },
+                  id: jsonRpcMessage.id
+                };
+              } catch (error: any) {
+                console.error('Error adding transaction:', error);
+                toolResponse = {
+                  jsonrpc: '2.0',
+                  error: {
+                    code: -32603,
+                    message: `Failed to add transaction: ${error.message}`
+                  },
+                  id: jsonRpcMessage.id
+                };
+              }
               break;
               
             case 'getAccountBalance':
-              toolResponse = {
-                jsonrpc: '2.0',
-                result: {
-                  content: [
-                    {
-                      type: 'text',
-                      text: `💳 Account ${args.accountId} balance: $1,234.56 (Demo data)`
-                    }
-                  ]
-                },
-                id: jsonRpcMessage.id
-              };
+              try {
+                const balance = await accountService.getAccountBalance(args.accountId, user.userId);
+                const account = await accountService.getAccountById(args.accountId, user.userId);
+                
+                toolResponse = {
+                  jsonrpc: '2.0',
+                  result: {
+                    content: [
+                      {
+                        type: 'text',
+                        text: `💳 Account ${account?.name || args.accountId} balance: $${balance.toFixed(2)}`
+                      }
+                    ]
+                  },
+                  id: jsonRpcMessage.id
+                };
+              } catch (error: any) {
+                console.error('Error getting account balance:', error);
+                toolResponse = {
+                  jsonrpc: '2.0',
+                  error: {
+                    code: -32603,
+                    message: `Failed to get account balance: ${error.message}`
+                  },
+                  id: jsonRpcMessage.id
+                };
+              }
               break;
               
             case 'getTransactionHistory':
-              toolResponse = {
-                jsonrpc: '2.0',
-                result: {
-                  content: [
-                    {
-                      type: 'text',
-                      text: `📊 Transaction history for account ${args.accountId}:\n- 2024-01-10: -$50.00 Grocery shopping\n- 2024-01-09: +$500.00 Salary\n- 2024-01-08: -$25.00 Coffee (Demo data)`
-                    }
-                  ]
-                },
-                id: jsonRpcMessage.id
-              };
+              try {
+                const result = await transactionService.getTransactionsByAccount(
+                  args.accountId,
+                  user.userId,
+                  { limit: args.limit || 10, page: 1 }
+                );
+                
+                const account = await accountService.getAccountById(args.accountId, user.userId);
+                const transactionsText = result.transactions.length > 0
+                  ? result.transactions.map(t => 
+                      `- ${t.transaction_date.toLocaleDateString()}: ${t.type === 'expense' ? '-' : '+'}$${t.amount.toFixed(2)} ${t.description}`
+                    ).join('\n')
+                  : 'No transactions found';
+                
+                toolResponse = {
+                  jsonrpc: '2.0',
+                  result: {
+                    content: [
+                      {
+                        type: 'text',
+                        text: `📊 Transaction history for account ${account?.name || args.accountId}:\n${transactionsText}`
+                      }
+                    ]
+                  },
+                  id: jsonRpcMessage.id
+                };
+              } catch (error: any) {
+                console.error('Error getting transaction history:', error);
+                toolResponse = {
+                  jsonrpc: '2.0',
+                  error: {
+                    code: -32603,
+                    message: `Failed to get transaction history: ${error.message}`
+                  },
+                  id: jsonRpcMessage.id
+                };
+              }
               break;
               
             case 'getTotalBalance':
-              toolResponse = {
-                jsonrpc: '2.0',
-                result: {
-                  content: [
-                    {
-                      type: 'text',
-                      text: `💰 Total balance across all accounts: $5,678.90 (Demo data)`
-                    }
-                  ]
-                },
-                id: jsonRpcMessage.id
-              };
+              try {
+                const totalBalance = await accountService.getTotalBalance(user.userId);
+                toolResponse = {
+                  jsonrpc: '2.0',
+                  result: {
+                    content: [
+                      {
+                        type: 'text',
+                        text: `💰 Total balance across all accounts: $${totalBalance.toFixed(2)}`
+                      }
+                    ]
+                  },
+                  id: jsonRpcMessage.id
+                };
+              } catch (error: any) {
+                console.error('Error getting total balance:', error);
+                toolResponse = {
+                  jsonrpc: '2.0',
+                  error: {
+                    code: -32603,
+                    message: `Failed to get total balance: ${error.message}`
+                  },
+                  id: jsonRpcMessage.id
+                };
+              }
               break;
               
             case 'getRecentTransactions':
-              const limit = args?.limit || 10;
-              const typeFilter = args?.type || 'all';
-              toolResponse = {
-                jsonrpc: '2.0',
-                result: {
-                  content: [
-                    {
-                      type: 'text',
-                      text: `📋 Recent ${limit} transactions (${typeFilter}):\n- 2024-01-10: -$50.00 Grocery shopping\n- 2024-01-09: +$500.00 Salary\n- 2024-01-08: -$25.00 Coffee\n- 2024-01-07: -$100.00 Utilities (Demo data)`
-                    }
-                  ]
-                },
-                id: jsonRpcMessage.id
-              };
+              try {
+                const limit = args?.limit || 10;
+                const typeFilter = args?.type;
+                
+                const result = await transactionService.getTransactions(
+                  user.userId,
+                  typeFilter ? { type: typeFilter } : {},
+                  { limit, page: 1 }
+                );
+                
+                const transactionsText = result.transactions.length > 0
+                  ? result.transactions.map(t => 
+                      `- ${t.transaction_date.toLocaleDateString()}: ${t.type === 'expense' ? '-' : '+'}$${t.amount.toFixed(2)} ${t.description} (${t.account?.name || 'Unknown Account'})`
+                    ).join('\n')
+                  : 'No transactions found';
+                
+                toolResponse = {
+                  jsonrpc: '2.0',
+                  result: {
+                    content: [
+                      {
+                        type: 'text',
+                        text: `📋 Recent ${limit} transactions${typeFilter ? ` (${typeFilter})` : ''}:\n${transactionsText}`
+                      }
+                    ]
+                  },
+                  id: jsonRpcMessage.id
+                };
+              } catch (error: any) {
+                console.error('Error getting recent transactions:', error);
+                toolResponse = {
+                  jsonrpc: '2.0',
+                  error: {
+                    code: -32603,
+                    message: `Failed to get recent transactions: ${error.message}`
+                  },
+                  id: jsonRpcMessage.id
+                };
+              }
               break;
               
             case 'getUserAccounts':
-              toolResponse = {
-                jsonrpc: '2.0',
-                result: {
-                  content: [
-                    {
-                      type: 'text',
-                      text: `🏦 User accounts:\n- Account 1: Checking - $1,234.56\n- Account 2: Savings - $4,444.34\n- Account 3: Credit Card - -$0.00 (Demo data)`
-                    }
-                  ]
-                },
-                id: jsonRpcMessage.id
-              };
+              try {
+                const accounts = await accountService.getUserAccounts(user.userId);
+                const accountsText = accounts.length > 0 
+                  ? accounts.map(acc => `- ${acc.name}: $${acc.balance.toFixed(2)}`).join('\n')
+                  : 'No accounts found';
+                
+                toolResponse = {
+                  jsonrpc: '2.0',
+                  result: {
+                    content: [
+                      {
+                        type: 'text',
+                        text: `🏦 User accounts:\n${accountsText}`
+                      }
+                    ]
+                  },
+                  id: jsonRpcMessage.id
+                };
+              } catch (error: any) {
+                console.error('Error getting user accounts:', error);
+                toolResponse = {
+                  jsonrpc: '2.0',
+                  error: {
+                    code: -32603,
+                    message: `Failed to get user accounts: ${error.message}`
+                  },
+                  id: jsonRpcMessage.id
+                };
+              }
               break;
               
             default:
