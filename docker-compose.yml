@@ -50,8 +50,10 @@ services:
       - JWT_REFRESH_EXPIRY=70d
       - FRONTEND_URL=https://your-domain.com
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
     restart: unless-stopped
 
   db:
@@ -65,6 +67,12 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d finance_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     restart: unless-stopped
 
   redis:
