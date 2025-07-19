@@ -10,15 +10,19 @@ import {
   CircularProgress,
   Avatar,
   Divider,
-  Container
+  Container,
+  Link
 } from '@mui/material';
 import {
-  AccountBalance
+  AccountBalance,
+  ArrowBack
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 export default function Login() {
   const { login } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isRegistering, setIsRegistering] = useState(false);
@@ -125,8 +129,18 @@ export default function Login() {
         py: 4
       }}
     >
-      <Card sx={{ width: '100%', maxWidth: 450 }}>
-        <CardContent sx={{ p: 4 }}>
+      <Box sx={{ width: '100%', maxWidth: 450 }}>
+        <Box sx={{ mb: 2 }}>
+          <Button
+            startIcon={<ArrowBack />}
+            onClick={() => navigate('/')}
+            sx={{ color: 'text.secondary' }}
+          >
+            Back to Home
+          </Button>
+        </Box>
+        <Card sx={{ width: '100%' }}>
+          <CardContent sx={{ p: 4 }}>
           <Box sx={{ textAlign: 'center', mb: 4 }}>
             <Avatar sx={{ bgcolor: 'primary.main', mx: 'auto', mb: 2, width: 56, height: 56 }}>
               <AccountBalance sx={{ fontSize: 32 }} />
@@ -241,7 +255,8 @@ export default function Login() {
             </Button>
           </Box>
         </CardContent>
-      </Card>
+        </Card>
+      </Box>
     </Container>
   );
 }

@@ -43,6 +43,7 @@ import AnalyticsPage from './components/AnalyticsPage'
 import Snapshots from './components/Snapshots'
 import DailySpending from './components/DailySpending'
 import ClaudeAuth from './components/ClaudeAuth'
+import CompleteLandingPage from './components/CompleteLandingPage'
 import { AuthProvider, useAuth } from './context/AuthContext'
 
 const theme = createTheme({
@@ -65,14 +66,14 @@ interface MenuItem {
 }
 
 const menuItems: MenuItem[] = [
-  { text: 'Dashboard', icon: <Analytics />, path: '/dashboard' },
-  { text: 'Accounts', icon: <AccountBalance />, path: '/accounts' },
-  { text: 'Transactions', icon: <Receipt />, path: '/transactions' },
-  { text: 'Recurring Payments', icon: <Repeat />, path: '/recurring' },
-  { text: 'Goals', icon: <TrendingUp />, path: '/goals' },
-  { text: 'Daily Spending', icon: <Settings />, path: '/daily-spending' },
-  { text: 'Analytics', icon: <Analytics />, path: '/analytics' },
-  { text: 'Snapshots', icon: <CameraAlt />, path: '/snapshots' },
+  { text: 'Dashboard', icon: <Analytics />, path: '/app/dashboard' },
+  { text: 'Accounts', icon: <AccountBalance />, path: '/app/accounts' },
+  { text: 'Transactions', icon: <Receipt />, path: '/app/transactions' },
+  { text: 'Recurring Payments', icon: <Repeat />, path: '/app/recurring' },
+  { text: 'Goals', icon: <TrendingUp />, path: '/app/goals' },
+  { text: 'Daily Spending', icon: <Settings />, path: '/app/daily-spending' },
+  { text: 'Analytics', icon: <Analytics />, path: '/app/analytics' },
+  { text: 'Snapshots', icon: <CameraAlt />, path: '/app/snapshots' },
 ]
 
 function AppContent() {
@@ -88,7 +89,7 @@ function AppContent() {
 
   const handleLogout = () => {
     logout()
-    navigate('/login')
+    navigate('/')
   }
 
   const showNotification = (message: string, severity: 'success' | 'error' | 'warning' | 'info' = 'info') => {
@@ -124,9 +125,14 @@ function AppContent() {
     </Box>
   )
 
-  // Show login page if not authenticated
-  if (!user) {
+  // If not authenticated and trying to access app routes, redirect to login
+  if (!user && location.pathname.startsWith('/app')) {
     return <Login />
+  }
+
+  // If not authenticated and not on app routes, this will be handled by the router
+  if (!user) {
+    return null // Let the router handle public routes
   }
 
   return (
@@ -205,15 +211,15 @@ function AppContent() {
         <Toolbar />
         <Container maxWidth="lg">
           <Routes>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/accounts" element={<Accounts />} />
-            <Route path="/transactions" element={<Transactions />} />
-            <Route path="/recurring" element={<RecurringPayments />} />
-            <Route path="/goals" element={<Goals />} />
-            <Route path="/daily-spending" element={<DailySpending />} />
-            <Route path="/analytics" element={<AnalyticsPage />} />
-            <Route path="/snapshots" element={<Snapshots />} />
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/app/dashboard" element={<Dashboard />} />
+            <Route path="/app/accounts" element={<Accounts />} />
+            <Route path="/app/transactions" element={<Transactions />} />
+            <Route path="/app/recurring" element={<RecurringPayments />} />
+            <Route path="/app/goals" element={<Goals />} />
+            <Route path="/app/daily-spending" element={<DailySpending />} />
+            <Route path="/app/analytics" element={<AnalyticsPage />} />
+            <Route path="/app/snapshots" element={<Snapshots />} />
+            <Route path="/app" element={<Dashboard />} />
           </Routes>
         </Container>
       </Box>
@@ -264,8 +270,16 @@ function AppRouter() {
     )
   }
   
-  // Default app content
-  return <AppContent />
+  return (
+    <Routes>
+      {/* Public routes */}
+      <Route path="/" element={<CompleteLandingPage />} />
+      <Route path="/login" element={<Login />} />
+      
+      {/* Protected app routes */}
+      <Route path="/app/*" element={<AppContent />} />
+    </Routes>
+  )
 }
 
 export default App
